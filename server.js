@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { readFile } from "node:fs/promises";
 import { deployEscrowContract, readEscrowArtifact, runEscrowDemo } from "./src/arc-escrow.js";
+import { readFrequencyProof, runFrequencyProof } from "./src/arc-frequency.js";
 import { getArcBalance, scaledArcAmount, sendScaledUsdcTransactions } from "./src/arc-live.js";
 import { getCircleWalletsStatus } from "./src/circle-wallets.js";
 import { createLlmProvider, generateProductImageAsset, getLlmRuntimeConfig, runAiProviderSelfTest } from "./src/llm-providers.js";
@@ -90,7 +91,8 @@ async function routeApi(req, res) {
       ai: await runAiProviderSelfTest(),
       escrow: await runEscrowDemo(),
       nanopayment: await runNanopaymentProof(`http://${req.headers.host}`),
-      circleWallets: await getCircleWalletsStatus()
+      circleWallets: await getCircleWalletsStatus(),
+      frequency: await readFrequencyProof()
     };
     state.proofs = proofs;
     return sendJson(res, 200, { result, proofs, state });
@@ -155,7 +157,8 @@ async function routeApi(req, res) {
       ai: null,
       escrow: await readEscrowArtifact(),
       nanopayment: await readNanopaymentProof(),
-      circleWallets: await getCircleWalletsStatus()
+      circleWallets: await getCircleWalletsStatus(),
+      frequency: await readFrequencyProof()
     });
   }
 
@@ -195,6 +198,16 @@ async function routeApi(req, res) {
       dryRun: false,
       transactions: await sendScaledUsdcTransactions(items)
     });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/arc/frequency") {
+    const proof = await runFrequencyProof({
+      count: Number(body.count || 50),
+      amountUsdc: body.amountUsdc || "0.000001",
+      force: Boolean(body.force)
+    });
+    state.proofs.frequency = proof;
+    return sendJson(res, 200, { proof, state });
   }
 
   if (req.method === "GET" && url.pathname === "/api/mcp/catalog.search") {

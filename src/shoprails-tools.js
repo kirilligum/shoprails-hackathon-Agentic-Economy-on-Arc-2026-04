@@ -148,6 +148,7 @@ export function createInitialState() {
       ai: null,
       nanopayment: null,
       escrow: null,
+      frequency: null,
       circleWallets: {
         mode: "adapter_ready",
         status: "local_signer_active",

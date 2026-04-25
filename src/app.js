@@ -468,6 +468,7 @@ function renderProofPanel() {
   const proofs = state.proofs || {};
   const escrow = proofs.escrow;
   const nano = proofs.nanopayment;
+  const frequency = proofs.frequency;
   const circle = proofs.circleWallets || {};
   const ai = proofs.ai || aiTestStatus;
   const escrowFlow = escrow?.flows?.find((flow) => flow.kind === "review_release");
@@ -476,6 +477,7 @@ function renderProofPanel() {
   const realImage = ai?.image?.ok;
   const realNano = nano?.payment?.transaction;
   const realEscrow = escrow?.contractAddress && escrowFlow?.releaseTxHash;
+  const realFrequency = Number(frequency?.confirmedCount || 0) >= 50;
   const circleAddress = circle.wallet?.address || "";
   const circlePayment = circle.payment?.txHash;
   const circleDetail = circle.configured
@@ -495,6 +497,7 @@ function renderProofPanel() {
       <div class="proof-grid">
         ${proofBadge(realEscrow ? "real" : "warn", "Real Arc escrow", realEscrow ? `contract ${shortAddress(escrow.contractAddress)} create/release/refund` : "not loaded yet", realEscrow ? arcAddressUrl(escrow.contractAddress) : "")}
         ${proofBadge(realNano ? "real" : "warn", "Real x402 nanopayment", realNano ? `${nano.payment.formattedAmount} USDC transfer ${nano.payment.transaction}` : "run full demo to load proof", nano?.payment?.transferProofUrl || "")}
+        ${proofBadge(realFrequency ? "real" : "warn", "50+ Arc tx burst", realFrequency ? `${frequency.confirmedCount} txs at ${frequency.amountUsdc} USDC/action` : "run npm run arc:frequency", frequency?.sampleTxUrls?.[0] || "")}
         ${proofBadge(realGemini ? "real" : "warn", "Real Gemini call", realGemini ? ai.configuredText.model : "click Test AI providers", "")}
         ${proofBadge(realImage ? "real" : "warn", "Real Nano Banana image", realImage ? ai.image.model : "click Test AI providers", ai?.image?.url || "")}
         ${proofBadge("sim", "Simulated receipt ledger", "x402-style receipts for every atomic query", "")}

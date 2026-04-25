@@ -9,6 +9,7 @@
     "test": "node tests/run-tests.js",
     "circle:setup": "node scripts/setup-circle-wallets.mjs",
     "circle:transfer": "node scripts/run-circle-wallet-transfer.mjs",
+    "arc:frequency": "node scripts/run-arc-frequency-demo.mjs",
     "demo:capture": "node scripts/capture-demo.mjs"
   },
   "keywords": [
