@@ -1,0 +1,101 @@
+{
+  "kind": "real_circle_x402_gateway",
+  "status": "paid",
+  "createdAt": "2026-04-25T22:27:56.661Z",
+  "url": "http://localhost:4173/api/x402/premium-catalog?queryId=q-sushi",
+  "deposit": {
+    "deposited": true,
+    "address": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+    "minimumAmount": "0.01",
+    "approvalTxHash": "0x73f89a439411c5cfa0de01b3bf9a3158f0261e07f211c7605f2d345f10947532",
+    "depositTxHash": "0xac5f02bf7310f988ed13c94b7142b266904681a70549dac32f857447401b9786",
+    "amount": "0.01",
+    "before": {
+      "wallet": {
+        "balance": "19600907",
+        "formatted": "19.600907"
+      },
+      "gateway": {
+        "total": "9580",
+        "available": "9580",
+        "withdrawing": "0",
+        "withdrawable": "0",
+        "formattedTotal": "0.00958",
+        "formattedAvailable": "0.00958",
+        "formattedWithdrawing": "0",
+        "formattedWithdrawable": "0"
+      }
+    },
+    "after": {
+      "wallet": {
+        "balance": "19588190",
+        "formatted": "19.58819"
+      },
+      "gateway": {
+        "total": "19580",
+        "available": "19580",
+        "withdrawing": "0",
+        "withdrawable": "0",
+        "formattedTotal": "0.01958",
+        "formattedAvailable": "0.01958",
+        "formattedWithdrawing": "0",
+        "formattedWithdrawable": "0"
+      }
+    },
+    "explorerUrl": "https://testnet.arcscan.app"
+  },
+  "payment": {
+    "amount": "420",
+    "formattedAmount": "0.00042",
+    "transaction": "ca4e40f9-1936-4e27-98bd-1b7b33f9c6b8",
+    "status": 200,
+    "transferProofUrl": "https://gateway-api-testnet.circle.com/v1/x402/transfers/ca4e40f9-1936-4e27-98bd-1b7b33f9c6b8"
+  },
+  "data": {
+    "premiumData": {
+      "queryId": "q-sushi",
+      "category": "sushi",
+      "query": "sushi platter delivery for 10 people, Friday before 7 PM, MindsDB office",
+      "freshness": "live-x402-paid",
+      "recommendations": [
+        "sushi-party-set",
+        "bamboo-utensils"
+      ]
+    },
+    "x402": {
+      "amount": "420",
+      "formattedAmount": "0.000420",
+      "network": "eip155:5042002",
+      "facilitator": "https://gateway-api-testnet.circle.com",
+      "transaction": "ca4e40f9-1936-4e27-98bd-1b7b33f9c6b8",
+      "transferProofUrl": "https://gateway-api-testnet.circle.com/v1/x402/transfers/ca4e40f9-1936-4e27-98bd-1b7b33f9c6b8",
+      "verify": {
+        "isValid": true,
+        "payer": "0xe6420890312234643fc16a42147f7d8eed9be1f6"
+      },
+      "settle": {
+        "success": true,
+        "payer": "0xe6420890312234643fc16a42147f7d8eed9be1f6",
+        "transaction": "ca4e40f9-1936-4e27-98bd-1b7b33f9c6b8",
+        "network": "eip155:5042002"
+      }
+    }
+  },
+  "transfer": {
+    "id": "ca4e40f9-1936-4e27-98bd-1b7b33f9c6b8",
+    "status": "received",
+    "token": "USDC",
+    "sendingNetwork": "eip155:5042002",
+    "recipientNetwork": "eip155:5042002",
+    "fromAddress": "0xe6420890312234643fc16a42147f7d8eed9be1f6",
+    "toAddress": "0xa11ce00000000000000000000000000000000001",
+    "amount": "420",
+    "createdAt": "2026-04-25T22:27:56.037Z",
+    "updatedAt": "2026-04-25T22:27:56.037Z"
+  },
+  "docs": {
+    "nanopayments": "https://developers.circle.com/gateway/nanopayments",
+    "buyer": "https://developers.circle.com/gateway/nanopayments/howtos/x402-buyer",
+    "facilitator": "https://docs.x402.org/core-concepts/facilitator"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "shoprails-hackathon-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent-native commerce guardrails demo for Arc, USDC, Circle Wallets, and Nanopayments.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run-tests.js",
+    "circle:setup": "node scripts/setup-circle-wallets.mjs",
+    "circle:transfer": "node scripts/run-circle-wallet-transfer.mjs",
+    "demo:capture": "node scripts/capture-demo.mjs"
+  },
+  "keywords": [
+    "shoprails",
+    "agentic-commerce",
+    "arc",
+    "circle",
+    "usdc",
+    "x402"
+  ],
+  "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.3.0",
+    "@circle-fin/x402-batching": "^3.0.2",
+    "@x402/core": "^2.10.0",
+    "@x402/evm": "^2.10.0",
+    "ethers": "^6.16.0",
+    "solc": "^0.8.34",
+    "viem": "^2.48.4"
+  }
+}

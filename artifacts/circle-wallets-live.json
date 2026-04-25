@@ -1,0 +1,35 @@
+{
+  "kind": "circle_wallets_live",
+  "status": "ready",
+  "steps": [
+    "using_existing_entity_secret",
+    "using_existing_wallet_set",
+    "using_existing_wallet"
+  ],
+  "walletSet": {
+    "id": "ec3951bc-f5cd-530a-bff4-4b081e69c265",
+    "custodyType": "DEVELOPER",
+    "name": "ShopRails Hackathon Demo",
+    "updateDate": "2026-04-25T23:19:49Z",
+    "createDate": "2026-04-25T23:19:49Z"
+  },
+  "wallet": {
+    "id": "6afdb343-3605-547e-a388-049e408dba66",
+    "state": "LIVE",
+    "walletSetId": "ec3951bc-f5cd-530a-bff4-4b081e69c265",
+    "custodyType": "DEVELOPER",
+    "refId": "shoprails-hackathon-buyer",
+    "name": "ShopRails Buyer Agent Wallet",
+    "address": "0x7d160d05d05a6f8175abd9ec04a48ec48642190f",
+    "blockchain": "ARC-TESTNET",
+    "accountType": "EOA",
+    "updateDate": "2026-04-25T23:19:49Z",
+    "createDate": "2026-04-25T23:19:49Z"
+  },
+  "recovery": {
+    "directory": "artifacts/circle-wallets-recovery",
+    "savedBySdk": true
+  },
+  "arcscanAddressUrl": "https://testnet.arcscan.app/address/0x7d160d05d05a6f8175abd9ec04a48ec48642190f",
+  "updatedAt": "2026-04-25T23:30:30.092Z"
+}

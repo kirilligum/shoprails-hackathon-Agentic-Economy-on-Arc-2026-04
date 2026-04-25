@@ -1,0 +1,54 @@
+{
+  "kind": "circle_wallets_arc_transfer",
+  "status": "COMPLETE",
+  "transactionId": "6232e39e-6b50-560f-9004-ac09b700a1e3",
+  "txHash": "0x95c1c62fb23da00c732bdf38869894032797a1eb4669596bed3830837c599d07",
+  "txUrl": "https://testnet.arcscan.app/tx/0x95c1c62fb23da00c732bdf38869894032797a1eb4669596bed3830837c599d07",
+  "amount": "0.001",
+  "tokenAddress": "0x3600000000000000000000000000000000000000",
+  "blockchain": "ARC-TESTNET",
+  "from": "0x7d160d05d05a6f8175abd9ec04a48ec48642190f",
+  "to": "0xa11ce00000000000000000000000000000000001",
+  "merchant": "Sushi Harbor",
+  "fundingTxHash": "",
+  "fundingTxUrl": "",
+  "fundingBlockNumber": "",
+  "beforeBalanceUsdc": "0.05",
+  "finalTransaction": {
+    "id": "6232e39e-6b50-560f-9004-ac09b700a1e3",
+    "blockchain": "ARC-TESTNET",
+    "tokenId": "15dc2b5d-0994-58b0-bf8c-3a0501148ee8",
+    "walletId": "6afdb343-3605-547e-a388-049e408dba66",
+    "sourceAddress": "0x7d160d05d05a6f8175abd9ec04a48ec48642190f",
+    "destinationAddress": "0xa11ce00000000000000000000000000000000001",
+    "transactionType": "OUTBOUND",
+    "custodyType": "DEVELOPER",
+    "state": "COMPLETE",
+    "transactionScreeningEvaluation": {
+      "screeningDate": "2026-04-25T23:23:10Z"
+    },
+    "amounts": [
+      "0.001"
+    ],
+    "nfts": null,
+    "txHash": "0x95c1c62fb23da00c732bdf38869894032797a1eb4669596bed3830837c599d07",
+    "blockHash": "0x9f583120802499780c02d2406261164545de17518f5a0c8b117bc299e0c74ba9",
+    "blockHeight": 39035868,
+    "networkFee": "0.0004515",
+    "firstConfirmDate": "2026-04-25T23:23:12Z",
+    "operation": "TRANSFER",
+    "feeLevel": "MEDIUM",
+    "estimatedFee": {
+      "gasLimit": "21000",
+      "networkFee": "0.0008715",
+      "baseFee": "20",
+      "priorityFee": "1.5",
+      "maxFee": "41.5"
+    },
+    "refId": "shoprails-circle-wallet-1777159390629",
+    "abiParameters": null,
+    "createDate": "2026-04-25T23:23:10Z",
+    "updateDate": "2026-04-25T23:23:12Z"
+  },
+  "updatedAt": "2026-04-25T23:23:13.433Z"
+}

@@ -1,0 +1,334 @@
+{
+  "network": "Arc Testnet",
+  "chainId": 5042002,
+  "contractAddress": "0x50c86d09A84186b87C60600Fb43aec5b4687EADC",
+  "reviewer": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "reviewer_",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "escrowId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "offerId",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "policyDecisionId",
+          "type": "string"
+        }
+      ],
+      "name": "EscrowCreated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "escrowId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "EscrowRefunded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "escrowId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "EscrowReleased",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "offerId",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "policyDecisionId",
+          "type": "string"
+        }
+      ],
+      "name": "createEscrow",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "escrowId",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "escrows",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "buyer",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "seller",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "offerId",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "policyDecisionId",
+          "type": "string"
+        },
+        {
+          "internalType": "enum ShopRailsEscrow.Status",
+          "name": "status",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "nextEscrowId",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "escrowId",
+          "type": "uint256"
+        }
+      ],
+      "name": "refund",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "escrowId",
+          "type": "uint256"
+        }
+      ],
+      "name": "release",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "reviewer",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "deployTxHash": "0x0c3b3ae13c0909c7140a693101b16298324f82b1a4d5191178d0ba090363f6c3",
+  "deployBlockNumber": 39028447,
+  "explorerUrl": "https://testnet.arcscan.app",
+  "createdAt": "2026-04-25T22:20:32.152Z",
+  "flows": [
+    {
+      "kind": "review_release",
+      "offerId": "crew-costume-pack",
+      "offerName": "One-size pirate costume pack",
+      "seller": "0xB0B0000000000000000000000000000000000002",
+      "sellerName": "Seven Seas Costume Co.",
+      "amountUsdc": "0.000600",
+      "amountWei": "600000000000000",
+      "escrowId": "1",
+      "createTxHash": "0x5d3e06fe2c6b322d2cedffca55e912ecfa4d8d0b4231681c00074ccd0c16553c",
+      "createBlockNumber": 39028456,
+      "createTxUrl": "https://testnet.arcscan.app/tx/0x5d3e06fe2c6b322d2cedffca55e912ecfa4d8d0b4231681c00074ccd0c16553c",
+      "contractAddress": "0x50c86d09A84186b87C60600Fb43aec5b4687EADC",
+      "contractUrl": "https://testnet.arcscan.app/address/0x50c86d09A84186b87C60600Fb43aec5b4687EADC",
+      "status": "released",
+      "releaseTxHash": "0x97c45dd3df1ca083914ad49c0dbdaeb2fae23bf16bccaf5bdf0b67bede694f2d",
+      "releaseBlockNumber": 39028465,
+      "releaseTxUrl": "https://testnet.arcscan.app/tx/0x97c45dd3df1ca083914ad49c0dbdaeb2fae23bf16bccaf5bdf0b67bede694f2d",
+      "finalState": {
+        "escrowId": "1",
+        "buyer": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+        "seller": "0xb0b0000000000000000000000000000000000002",
+        "amountWei": "600000000000000",
+        "amountUsdc": "0.0006",
+        "offerId": "crew-costume-pack",
+        "policyDecisionId": "live-review-crew-costume-pack",
+        "statusCode": 2,
+        "status": "released"
+      }
+    },
+    {
+      "kind": "review_release",
+      "offerId": "assistant-maya",
+      "offerName": "Setup assistant Maya R.",
+      "seller": "0xC0FFEE0000000000000000000000000000000003",
+      "sellerName": "TaskDock Assistants",
+      "amountUsdc": "0.000950",
+      "amountWei": "950000000000000",
+      "escrowId": "2",
+      "createTxHash": "0xf8754e0a5b73f40ff697ea61702d2f5bcf0d99004ddc21df801d18b739705c1c",
+      "createBlockNumber": 39028475,
+      "createTxUrl": "https://testnet.arcscan.app/tx/0xf8754e0a5b73f40ff697ea61702d2f5bcf0d99004ddc21df801d18b739705c1c",
+      "contractAddress": "0x50c86d09A84186b87C60600Fb43aec5b4687EADC",
+      "contractUrl": "https://testnet.arcscan.app/address/0x50c86d09A84186b87C60600Fb43aec5b4687EADC",
+      "status": "released",
+      "releaseTxHash": "0x57f624e52c6c0f045b28fa3aab445f0a968972d148128642bed76137a583fdb4",
+      "releaseBlockNumber": 39028484,
+      "releaseTxUrl": "https://testnet.arcscan.app/tx/0x57f624e52c6c0f045b28fa3aab445f0a968972d148128642bed76137a583fdb4",
+      "finalState": {
+        "escrowId": "2",
+        "buyer": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+        "seller": "0xc0fFEE0000000000000000000000000000000003",
+        "amountWei": "950000000000000",
+        "amountUsdc": "0.00095",
+        "offerId": "assistant-maya",
+        "policyDecisionId": "live-review-assistant-maya",
+        "statusCode": 2,
+        "status": "released"
+      }
+    },
+    {
+      "kind": "refund_smoke",
+      "offerId": "gold-compass-listing",
+      "offerName": "Premium pirate compass listing",
+      "seller": "0xE11A000000000000000000000000000000000005",
+      "sellerName": "Unknown Bazaar",
+      "amountUsdc": "0.000790",
+      "amountWei": "790000000000000",
+      "escrowId": "3",
+      "createTxHash": "0x6c8bc81515c7a5b1ae75243b54a5fadc8caee79bb5df01dbc1704d632b96b2b4",
+      "createBlockNumber": 39028494,
+      "createTxUrl": "https://testnet.arcscan.app/tx/0x6c8bc81515c7a5b1ae75243b54a5fadc8caee79bb5df01dbc1704d632b96b2b4",
+      "contractAddress": "0x50c86d09A84186b87C60600Fb43aec5b4687EADC",
+      "contractUrl": "https://testnet.arcscan.app/address/0x50c86d09A84186b87C60600Fb43aec5b4687EADC",
+      "status": "refunded",
+      "refundTxHash": "0x3a389f9c1500b0d493c5036db882c6e2f7d00e8f0f99731cf86e89d5d4be7397",
+      "refundBlockNumber": 39028504,
+      "refundTxUrl": "https://testnet.arcscan.app/tx/0x3a389f9c1500b0d493c5036db882c6e2f7d00e8f0f99731cf86e89d5d4be7397",
+      "finalState": {
+        "escrowId": "3",
+        "buyer": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+        "seller": "0xe11A000000000000000000000000000000000005",
+        "amountWei": "790000000000000",
+        "amountUsdc": "0.00079",
+        "offerId": "gold-compass-listing",
+        "policyDecisionId": "live-refund-risk-smoke",
+        "statusCode": 3,
+        "status": "refunded"
+      }
+    }
+  ],
+  "lastRunAt": "2026-04-25T22:21:01.315Z"
+}
