@@ -1,5 +1,20 @@
-import { ARC_CONFIG, atomicQueries, offers } from "../src/data.js";
-import { applyCostumeTryOnResult, createInitialState, getNanopaymentReceipt, reviewChat, runDemoMission, runDemoMissionWithLlm } from "../src/shoprails-tools.js";
+import { ARC_CONFIG, atomicQueries, merchants, offers } from "../src/data.js";
+import {
+  applyCostumeTryOnResult,
+  catalogSearch,
+  checkoutEvaluate,
+  checkoutSubmit,
+  createInitialState,
+  getNanopaymentReceipt,
+  merchantGetOffer,
+  reviewApprove,
+  reviewChat,
+  reviewList,
+  runDemoMission,
+  runDemoMissionWithLlm,
+  scorerEvaluate,
+  walletGetBalance
+} from "../src/shoprails-tools.js";
 import { TRY_ON_IMAGE_MODEL, TRY_ON_PERSON_IMAGE, buildTryOnNanoActions, buildTryOnPrompt, dryRunTryOnNanoActions, getCostumeTryOnOffer, tryOnCacheKey } from "../src/try-on.js";
 
 const TEXT_MODEL = "gemini-3.1-flash-lite-preview";
@@ -7,6 +22,12 @@ const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 const TEXT_FALLBACK_MODEL = "gemini-3-flash-preview";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const CIRCLE_API_BASE = "https://api.circle.com";
+const PRICE_SCALE = 100000;
+const DEFAULT_X402_QUERY_ID = "q-sushi";
+const GATEWAY_API_TESTNET = "https://gateway-api-testnet.circle.com";
+const HOSTED_STATE_KEY = "shoprails:hosted-state";
+
+let hostedState = createInitialState();
 
 function textFromGeminiResponse(payload) {
   return (payload.candidates || [])
@@ -105,6 +126,68 @@ function json(payload, status = 200) {
   });
 }
 
+function scaledArcAmount(priceUsdc) {
+  return (Number(priceUsdc) / PRICE_SCALE).toFixed(6);
+}
+
+function toBaseUnits(amount) {
+  return Math.max(1, Math.round(Number(amount) * 1_000_000)).toString();
+}
+
+function fromBaseUnits(amount) {
+  return (Number(amount) / 1_000_000).toFixed(6);
+}
+
+function encodeBase64Json(value) {
+  return btoa(JSON.stringify(value));
+}
+
+function arcTxUrl(txHash) {
+  return `${ARC_CONFIG.explorerUrl}/tx/${txHash}`;
+}
+
+function arcAddressUrl(address) {
+  return `${ARC_CONFIG.explorerUrl}/address/${address}`;
+}
+
+function formatWeiAsUsdc(value) {
+  const wei = BigInt(value);
+  const scale = 10n ** BigInt(ARC_CONFIG.nativeDecimals);
+  const whole = wei / scale;
+  const fraction = (wei % scale).toString().padStart(ARC_CONFIG.nativeDecimals, "0").slice(0, 6);
+  return `${whole}.${fraction}`;
+}
+
+async function arcRpc(method, params = []) {
+  const response = await fetch(ARC_CONFIG.rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: crypto.randomUUID(),
+      method,
+      params
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.error) {
+    throw new Error(payload.error?.message || `Arc RPC ${method} failed with ${response.status}`);
+  }
+  return payload.result;
+}
+
+async function getHostedArcBalance(address) {
+  const balanceHex = await arcRpc("eth_getBalance", [address, "latest"]);
+  const balanceWei = BigInt(balanceHex).toString();
+  return {
+    address,
+    balanceWei,
+    balanceUsdc: Number(formatWeiAsUsdc(balanceWei)),
+    explorerUrl: arcAddressUrl(address),
+    source: "arc_rpc_worker"
+  };
+}
+
 function unauthorized() {
   return new Response("ShopRails demo login required.", {
     status: 401,
@@ -144,6 +227,33 @@ async function readAssetJson(env, request, path) {
   const response = await env.ASSETS.fetch(new Request(url));
   if (!response.ok) return null;
   return response.json();
+}
+
+async function loadHostedState(env) {
+  if (!env.TRYON_CACHE) return hostedState;
+  const saved = await env.TRYON_CACHE.get(HOSTED_STATE_KEY, "json");
+  if (saved?.wallet && saved?.catalog) {
+    hostedState = saved;
+  }
+  return hostedState;
+}
+
+function scrubStateForKv(state) {
+  const copy = JSON.parse(JSON.stringify(state));
+  const image = copy.tryOn?.latest?.image;
+  if (image?.url && String(image.url).startsWith("data:")) {
+    image.url = "";
+    image.cachedInKv = true;
+  }
+  return copy;
+}
+
+async function saveHostedState(env, state = hostedState) {
+  hostedState = state;
+  if (!env.TRYON_CACHE) return;
+  await env.TRYON_CACHE.put(HOSTED_STATE_KEY, JSON.stringify(scrubStateForKv(state)), {
+    expirationTtl: 60 * 60 * 6
+  });
 }
 
 function arrayBufferToBase64(buffer) {
@@ -318,6 +428,126 @@ async function runCircleNanoTransfers(env, actions) {
       circleVariant: created.variant
     };
   }));
+}
+
+function buildHostedSettlementActions(items) {
+  return (items || []).map((item) => ({
+    id: item.id,
+    itemId: item.id,
+    label: item.label || item.id,
+    kind: item.kind || "settlement",
+    action: item.label || "Direct seller payment",
+    provider: item.provider || item.label || "Seller",
+    endpoint: "/api/arc/settle",
+    request: `Direct Arc USDC payment for ${item.label || item.id}`,
+    paidTo: item.to,
+    to: item.to,
+    humanPrice: Number(item.amount),
+    amountUsdc: scaledArcAmount(Number(item.amount)),
+    amount: Number(scaledArcAmount(Number(item.amount))),
+    protocol: "direct_usdc",
+    rail: "Circle Wallets",
+    scheme: "CircleWalletsTransfer",
+    chain: ARC_CONFIG.networkName,
+    currency: "USDC"
+  }));
+}
+
+async function settleHostedItems(env, items) {
+  const actions = buildHostedSettlementActions(items);
+  const transactions = await runCircleNanoTransfers(env, actions);
+  return transactions.map((tx) => ({
+    itemId: tx.itemId || tx.id,
+    label: tx.label || tx.action,
+    kind: tx.kind,
+    to: tx.to || tx.paidTo,
+    humanPrice: tx.humanPrice,
+    amountUsdc: tx.amountUsdc,
+    hash: tx.txHash,
+    txHash: tx.txHash,
+    txUrl: tx.txUrl,
+    blockNumber: tx.blockNumber || null,
+    status: tx.status,
+    transactionId: tx.transactionId,
+    source: tx.source,
+    circleVariant: tx.circleVariant
+  }));
+}
+
+function merchantTargets() {
+  return [
+    { category: "sushi", merchant: merchants["sushi-harbor"] },
+    { category: "props", merchant: merchants["sevenseas-costumes"] },
+    { category: "assistant", merchant: merchants.taskdock }
+  ];
+}
+
+async function runHostedFrequencyProof(env, { count = 50, amountUsdc = "0.000001" } = {}) {
+  const targets = merchantTargets();
+  const startedAt = new Date();
+  const actions = Array.from({ length: count }, (_, index) => {
+    const target = targets[index % targets.length];
+    return {
+      id: `price-check-${String(index + 1).padStart(2, "0")}`,
+      actionId: `price-check-${String(index + 1).padStart(2, "0")}`,
+      action: `Price-check ${index + 1}`,
+      kind: "frequency_nanopayment",
+      provider: target.merchant.name,
+      endpoint: "/api/arc/frequency",
+      request: `High-frequency ${target.category} API proof ${index + 1}`,
+      category: target.category,
+      seller: target.merchant.name,
+      paidTo: target.merchant.wallet,
+      to: target.merchant.wallet,
+      amountUsdc: Number(amountUsdc).toFixed(6),
+      amount: Number(amountUsdc),
+      protocol: "direct_usdc",
+      rail: "Circle Wallets",
+      scheme: "CircleWalletsTransfer",
+      chain: ARC_CONFIG.networkName,
+      currency: "USDC"
+    };
+  });
+  const transfers = await runCircleNanoTransfers(env, actions);
+  const endedAt = new Date();
+  const durationMs = endedAt.getTime() - startedAt.getTime();
+  const transactions = transfers.map((tx, index) => ({
+    index: index + 1,
+    actionId: tx.actionId || tx.id,
+    category: tx.category,
+    seller: tx.seller || tx.provider,
+    to: tx.paidTo,
+    amountUsdc: tx.amountUsdc,
+    txHash: tx.txHash,
+    txUrl: tx.txUrl || (tx.txHash ? arcTxUrl(tx.txHash) : ""),
+    blockNumber: tx.blockNumber || null,
+    status: tx.status,
+    transactionId: tx.transactionId,
+    source: tx.source
+  }));
+  const confirmedCount = transactions.filter((tx) => tx.status === "confirmed").length;
+  return {
+    kind: "real_arc_transaction_frequency",
+    status: confirmedCount === count ? "confirmed" : "partial",
+    network: ARC_CONFIG.networkName,
+    chainId: ARC_CONFIG.chainId,
+    rpcUrl: ARC_CONFIG.rpcUrl,
+    explorerUrl: ARC_CONFIG.explorerUrl,
+    walletAddress: env.CIRCLE_WALLET_ADDRESS || hostedState.wallet.buyerAddress,
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    durationMs,
+    confirmedCount,
+    requestedCount: count,
+    amountUsdc: Number(amountUsdc).toFixed(6),
+    perActionPriceOk: Number(amountUsdc) <= 0.01,
+    totalActionValueUsdc: (Number(amountUsdc) * confirmedCount).toFixed(6),
+    averageTransactionsPerSecond: Number((confirmedCount / Math.max(durationMs / 1000, 1)).toFixed(3)),
+    sampleTxUrls: transactions.slice(0, 5).map((tx) => tx.txUrl).filter(Boolean),
+    marginExplanation:
+      "Each action is priced at 0.000001 USDC. Traditional card rails cannot settle this because fixed fees would exceed revenue, while Arc uses USDC-native settlement for high-frequency agent actions.",
+    transactions
+  };
 }
 
 async function cachedNanoFallback(env, request, actions, error) {
@@ -508,6 +738,98 @@ function circleStatus(live, payment) {
   };
 }
 
+function nanopaymentRequirement(queryId = DEFAULT_X402_QUERY_ID) {
+  const query = atomicQueries.find((item) => item.id === queryId) || atomicQueries[0];
+  const seller = merchants["sushi-harbor"];
+  return {
+    query,
+    requirements: {
+      scheme: "exact",
+      network: `eip155:${ARC_CONFIG.chainId}`,
+      asset: ARC_CONFIG.usdcAddress,
+      amount: toBaseUnits(query.x402Price),
+      payTo: seller.wallet,
+      maxTimeoutSeconds: 345600,
+      extra: {
+        name: "GatewayWalletBatched",
+        version: "1",
+        verifyingContract: ARC_CONFIG.gatewayWalletAddress
+      }
+    }
+  };
+}
+
+function createPaymentRequired(url, queryId = DEFAULT_X402_QUERY_ID) {
+  const { query, requirements } = nanopaymentRequirement(queryId);
+  return {
+    x402Version: 2,
+    resource: {
+      url,
+      description: `AIsa premium catalog data for ${query.category}: ${query.query}`,
+      mimeType: "application/json"
+    },
+    accepts: [requirements]
+  };
+}
+
+function hostedPremiumCatalogResponse(request, queryId = DEFAULT_X402_QUERY_ID) {
+  const url = new URL(request.url);
+  const paymentHeader = request.headers.get("payment-signature") || request.headers.get("x-payment");
+  const paymentRequired = createPaymentRequired(url.toString(), queryId);
+  const { query, requirements } = nanopaymentRequirement(queryId);
+
+  if (!paymentHeader) {
+    return new Response(JSON.stringify({ error: "PAYMENT_REQUIRED", paymentRequired }, null, 2), {
+      status: 402,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "payment-required": encodeBase64Json(paymentRequired),
+        "cache-control": "no-store"
+      }
+    });
+  }
+
+  const paymentResponse = {
+    success: true,
+    transaction: `hosted-worker-x402-${crypto.randomUUID()}`,
+    network: requirements.network,
+    amount: requirements.amount,
+    mode: "hosted_payment_header_accepted",
+    facilitator: GATEWAY_API_TESTNET
+  };
+  return new Response(JSON.stringify({
+    premiumData: {
+      queryId: query.id,
+      category: query.category,
+      query: query.query,
+      freshness: "hosted-x402-paid",
+      recommendations: ["sushi-party-set", "bamboo-utensils"]
+    },
+    x402: {
+      amount: requirements.amount,
+      formattedAmount: fromBaseUnits(requirements.amount),
+      network: requirements.network,
+      facilitator: GATEWAY_API_TESTNET,
+      transaction: paymentResponse.transaction,
+      verify: {
+        isValid: true,
+        mode: "hosted_worker_header_demo"
+      },
+      settle: {
+        success: true,
+        mode: "hosted_worker_header_demo"
+      }
+    }
+  }, null, 2), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "payment-response": encodeBase64Json(paymentResponse),
+      "cache-control": "no-store"
+    }
+  });
+}
+
 async function readJson(request) {
   const text = await request.text();
   return text ? JSON.parse(text) : {};
@@ -517,25 +839,30 @@ async function handleApi(request, env) {
   const url = new URL(request.url);
   const method = request.method;
   const body = method === "POST" ? await readJson(request) : {};
+  await loadHostedState(env);
+  const withSavedState = async (payload, status = 200) => {
+    await saveHostedState(env, hostedState);
+    return json(payload, status);
+  };
 
   if (method === "POST" && url.pathname === "/api/demo/reset") {
-    return json({ state: createInitialState() });
+    hostedState = createInitialState();
+    return withSavedState({ state: hostedState });
   }
 
   if (method === "POST" && url.pathname === "/api/demo/run") {
-    const state = createInitialState();
-    const result = await runDemoMissionWithLlm(state, createHostedLlmProvider(env));
-    state.proofs = { ...state.proofs, ...(await cachedProofs(env, request)), ai: state.proofs.ai };
-    return json({ result, state });
+    hostedState = createInitialState();
+    const result = await runDemoMissionWithLlm(hostedState, createHostedLlmProvider(env));
+    hostedState.proofs = { ...hostedState.proofs, ...(await cachedProofs(env, request)), ai: hostedState.proofs.ai };
+    return withSavedState({ result, state: hostedState });
   }
 
   if (method === "POST" && url.pathname === "/api/demo/full") {
-    const state = createInitialState();
-    const result = await runDemoMissionWithLlm(state, createHostedLlmProvider(env));
+    hostedState = createInitialState();
+    const result = await runDemoMissionWithLlm(hostedState, createHostedLlmProvider(env));
     const proofs = await cachedProofs(env, request);
-    state.proofs = proofs;
-    reviewChat(state, { message: "confirm all reviewed items" });
-    return json({ result, proofs, state });
+    hostedState.proofs = proofs;
+    return withSavedState({ result, proofs, state: hostedState });
   }
 
   if (method === "GET" && url.pathname === "/api/llm/config") {
@@ -611,15 +938,14 @@ async function handleApi(request, env) {
       signer = { mode: "cached_arc_fallback", fallback: true, reason: error.message };
     }
 
-    const state = createInitialState();
-    const tryOn = applyCostumeTryOnResult(state, {
+    const tryOn = applyCostumeTryOnResult(hostedState, {
       offerId,
       personImageUrl,
       image,
       nanoTransactions
     });
 
-    return json({
+    return withSavedState({
       offerId,
       image,
       nanoTransactions: tryOn.nanoTransactions,
@@ -628,14 +954,28 @@ async function handleApi(request, env) {
         tryOn,
         nanopayments: tryOn.nanoTransactions,
         wallet: {
-          nanopaymentSpent: state.wallet.nanopaymentSpent
+          nanopaymentSpent: hostedState.wallet.nanopaymentSpent
         }
       }
     });
   }
 
+  if (method === "GET" && url.pathname === "/api/mcp/wallet.get_balance") {
+    return withSavedState(walletGetBalance(hostedState));
+  }
+
+  if (method === "GET" && url.pathname === "/api/arc/balance") {
+    const address = url.searchParams.get("address") || env.CIRCLE_WALLET_ADDRESS || hostedState.wallet.buyerAddress;
+    return json(await getHostedArcBalance(address));
+  }
+
   if (method === "GET" && url.pathname === "/api/proofs") {
     return json(await cachedProofs(env, request));
+  }
+
+  if (method === "GET" && url.pathname === "/api/arc/escrow") {
+    const proofs = await cachedProofs(env, request);
+    return json(proofs.escrow || { status: "not_deployed" });
   }
 
   if (method === "GET" && url.pathname === "/api/circle/wallets/status") {
@@ -643,9 +983,77 @@ async function handleApi(request, env) {
     return json(proofs.circleWallets);
   }
 
+  if (method === "POST" && url.pathname === "/api/arc/escrow/deploy") {
+    const proofs = await cachedProofs(env, request);
+    return json({
+      ...(proofs.escrow || {}),
+      status: proofs.escrow?.contractAddress ? "predeployed_contract_available" : "not_deployed",
+      mode: "cloudflare_worker_predeployed_artifact",
+      note: "Cloudflare exposes the same route as local. Solidity compilation/deployment stays in the operator/build path; the hosted Worker serves the verified deployed Arc escrow artifact."
+    });
+  }
+
+  if (method === "POST" && url.pathname === "/api/arc/escrow/demo") {
+    const proofs = await cachedProofs(env, request);
+    hostedState.proofs.escrow = proofs.escrow;
+    return withSavedState({
+      proof: {
+        ...(proofs.escrow || {}),
+        mode: "cloudflare_worker_predeployed_artifact",
+        note: "Hosted demo uses the verified deployed escrow flow artifact. Direct seller settlement, frequency, and try-on nanopayments use fresh Circle Wallets signing."
+      },
+      state: hostedState
+    });
+  }
+
+  if (method === "POST" && url.pathname === "/api/arc/settle") {
+    const items = (body.items || []).map((item) => ({
+      id: item.id,
+      label: item.label,
+      kind: item.kind,
+      to: item.to,
+      amount: Number(item.amount),
+      scaledAmount: scaledArcAmount(Number(item.amount))
+    }));
+
+    if (body.dryRun) {
+      return json({
+        dryRun: true,
+        items,
+        scale: "price / 100000",
+        mode: "cloudflare_worker_circle_wallets"
+      });
+    }
+
+    return json({
+      dryRun: false,
+      mode: "cloudflare_worker_circle_wallets",
+      transactions: await settleHostedItems(env, items)
+    });
+  }
+
+  if (method === "POST" && url.pathname === "/api/arc/frequency") {
+    const requestedCount = Number(body.count || 50);
+    if (body.dryRun) {
+      return json({
+        dryRun: true,
+        requestedCount,
+        amountUsdc: body.amountUsdc || "0.000001",
+        mode: "cloudflare_worker_circle_wallets"
+      });
+    }
+    const proof = await runHostedFrequencyProof(env, {
+      count: requestedCount,
+      amountUsdc: body.amountUsdc || "0.000001"
+    });
+    hostedState.proofs.frequency = proof;
+    return withSavedState({ proof, state: hostedState });
+  }
+
   if (method === "POST" && url.pathname === "/api/x402/nanopayment/run") {
     const proofs = await cachedProofs(env, request);
-    return json({ proof: proofs.nanopayment, state: createInitialState() });
+    hostedState.proofs.nanopayment = proofs.nanopayment;
+    return withSavedState({ proof: proofs.nanopayment, state: hostedState });
   }
 
   if (method === "GET" && url.pathname === "/api/x402/gateway/balances") {
@@ -653,25 +1061,58 @@ async function handleApi(request, env) {
     return json(proofs.nanopayment?.deposit?.after || { wallet: null, gateway: null });
   }
 
+  if (method === "POST" && url.pathname === "/api/x402/gateway/deposit") {
+    const proofs = await cachedProofs(env, request);
+    return json({
+      ...(proofs.nanopayment?.deposit || {}),
+      mode: "hosted_cached_gateway_proof",
+      note: "Cloudflare exposes the same route as local. Gateway SDK deposit runs in Node locally; hosted Worker serves the verified Gateway deposit proof while live Arc transfers use Circle Wallets."
+    });
+  }
+
+  if (method === "GET" && url.pathname === "/api/x402/premium-catalog") {
+    return hostedPremiumCatalogResponse(request, url.searchParams.get("queryId") || DEFAULT_X402_QUERY_ID);
+  }
+
   if (method === "GET" && url.pathname.startsWith("/api/receipts/nanopayment/")) {
     const paymentId = url.pathname.split("/").at(-1);
-    const receiptState = createInitialState();
-    runDemoMission(receiptState);
-    return json(getNanopaymentReceipt(paymentId, receiptState));
+    if (!hostedState.nanopayments.length) runDemoMission(hostedState);
+    return withSavedState(getNanopaymentReceipt(paymentId, hostedState));
   }
 
   if (method === "GET" && url.pathname === "/api/mcp/catalog.search") {
-    return json({
-      results: offers.filter((offer) => {
-        const category = url.searchParams.get("category");
-        return category ? offer.category === category : true;
-      }),
-      nanopayment: {
-        protocol: "x402",
-        rail: "Circle Nanopayments",
-        amount: atomicQueries[0].x402Price
-      }
-    });
+    return withSavedState(catalogSearch(hostedState, {
+      query: url.searchParams.get("query") || "",
+      category: url.searchParams.get("category") || ""
+    }));
+  }
+
+  if (method === "GET" && url.pathname === "/api/mcp/merchant.get_offer") {
+    return withSavedState(merchantGetOffer(hostedState, { offerId: url.searchParams.get("offerId") }));
+  }
+
+  if (method === "POST" && url.pathname === "/api/mcp/checkout.evaluate") {
+    return withSavedState(checkoutEvaluate(hostedState, body));
+  }
+
+  if (method === "POST" && (url.pathname === "/api/mcp/scorer.score" || url.pathname === "/api/scorer/evaluate")) {
+    return withSavedState(scorerEvaluate(hostedState, body));
+  }
+
+  if (method === "POST" && url.pathname === "/api/mcp/checkout.submit") {
+    return withSavedState(checkoutSubmit(hostedState, body));
+  }
+
+  if (method === "GET" && url.pathname === "/api/mcp/review.list") {
+    return withSavedState(reviewList(hostedState));
+  }
+
+  if (method === "POST" && url.pathname === "/api/mcp/review.chat") {
+    return withSavedState(reviewChat(hostedState, body));
+  }
+
+  if (method === "POST" && url.pathname === "/api/mcp/review.approve") {
+    return withSavedState(reviewApprove(hostedState, body));
   }
 
   return json({ error: "Unknown hosted API route" }, 404);

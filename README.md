@@ -16,6 +16,8 @@ ShopRails lets AI agents pay seller and scorer APIs with sub-cent USDC nanopayme
 
 New demo proof: the Costume Store includes a Nano Banana virtual try-on. Click the photo button, click `Put on`, and the hosted Worker generates the try-on image while creating four fresh Circle Wallets Arc nano transactions at `0.000001 USDC` each.
 
+Cloudflare is the primary demo and production-like surface. The hosted Worker exposes the same local API families for wallet, catalog, merchant offer lookup, scorer checks, checkout evaluation/submission, review chat/approval, Arc balance, Arc settlement, Arc frequency proofs, x402 receipts, and costume try-on. Stateful demo flows are persisted in Cloudflare KV so review-cart actions survive Worker isolate changes, and hosted Arc signing uses Circle Wallets REST plus Worker WebCrypto instead of a raw local private key.
+
 ## Screenshots
 
 ![ShopRails agent activity and proof panel](docs/screenshots/shoprails-agent-proof-log.png)
