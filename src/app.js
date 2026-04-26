@@ -21,6 +21,7 @@ let activeZoomImage = null;
 let llmMode = "gemini";
 let imageMode = "gemini";
 let llmConfig = null;
+let walletActionStatus = "";
 
 const app = document.querySelector("#app");
 
@@ -108,6 +109,34 @@ Good few-shot examples:
 Bad examples:
 - Do not treat a placeholder hash as proof.
 - Do not open unrelated explorer links if a row-specific link exists.`,
+
+  "add-funds": `Purpose: help the buyer fund the Arc Testnet wallet with USDC.
+
+LLM action semantics: use this when the buyer wants to add funds before shopping. The correct next step is to show the buyer wallet address, Circle faucet link, and ArcScan address. In production, this could also initiate an on-ramp or transfer request.
+
+Side effects in this demo: no funds move automatically. The UI displays deposit instructions and keeps the buyer address visible.
+
+Good few-shot examples:
+- Buyer says "top up my wallet" -> click Add funds and show the Arc Testnet address.
+- Presenter needs test USDC -> click Add funds, then use Circle faucet or transfer to the buyer address.
+
+Bad examples:
+- Do not claim the wallet was funded unless an Arc transaction confirms it.
+- Do not ask the agent to enter card details or private keys.`,
+
+  "withdraw-funds": `Purpose: start a buyer-controlled withdrawal flow from the ShopRails wallet.
+
+LLM action semantics: use this when the buyer asks to withdraw unused USDC. A production flow should collect a destination wallet, run policy checks, require human confirmation, and then submit a Circle Wallets transfer.
+
+Side effects in this demo: no funds move automatically. The UI shows a frontend-only withdrawal draft so judges see where the production backend path will connect.
+
+Good few-shot examples:
+- Buyer says "withdraw the remaining funds" -> click Withdraw funds and ask for destination address plus confirmation.
+- Buyer says "send unused USDC back to me" -> start withdrawal, then wait for explicit approval.
+
+Bad examples:
+- Do not withdraw to a seller address unless the buyer explicitly approves it.
+- Do not submit a blockchain transfer from this frontend-only demo button.`,
 
   "test-ai-providers": `Purpose: verify live Gemini text and image provider configuration.
 
@@ -968,11 +997,14 @@ function renderShell() {
             <span class="fund-status">${formatUsdc(state.wallet.onchainBalance)} confirmed on-chain in block ${state.wallet.fundingBlockNumber}</span>
           </div>
           <div class="fund-actions">
+            ${actionControl("add-funds", `<button class="primary" data-action="add-funds" data-ai-description="${escapeHtml(actionInstructions["add-funds"])}">Add funds</button>`, "Add funds")}
+            ${actionControl("withdraw-funds", `<button class="secondary" data-action="withdraw-funds" data-ai-description="${escapeHtml(actionInstructions["withdraw-funds"])}">Withdraw funds</button>`, "Withdraw funds")}
             <button class="ghost-light" data-copy-address="${state.wallet.buyerAddress}">Copy address</button>
             <a class="arc-button" href="${state.arc.faucetUrl}" target="_blank" rel="noreferrer">Circle faucet</a>
             <a class="arc-button" href="${arcAddressUrl(state.wallet.buyerAddress)}" target="_blank" rel="noreferrer">ArcScan address</a>
             <a class="arc-button" href="${arcTxUrl(state.wallet.fundingTxHash)}" target="_blank" rel="noreferrer">Funding tx</a>
           </div>
+          ${walletActionStatus ? `<div class="wallet-action-status">${escapeHtml(walletActionStatus)}</div>` : ""}
         </div>
         ${renderTransactionLedger()}
         ${renderRiskStory()}
@@ -2090,6 +2122,7 @@ async function runMissionFromUi({ sourceMessage = "", keepTab = "mission" } = {}
   state.proofs = { ...state.proofs, ...cachedProofs };
   if (buyerMessage) addChatLine("Buyer", buyerMessage);
   chatDraft = "explain the cart";
+  walletActionStatus = "";
   liveStatus = "Running real Gemini LLM calls and loading verified Arc transactions at price / 100,000.";
   renderShell();
 
@@ -2181,6 +2214,7 @@ function bindEvents() {
       aiTestStatus = null;
       imageStatus = "";
       tryOnStatus = "";
+      walletActionStatus = "";
       liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc transaction proof, and reviewed cart approval.";
       activeOfferId = null;
       loadingTryOnOfferId = "";
@@ -2232,6 +2266,19 @@ function bindEvents() {
     activeOfferId = null;
     loadingTryOnOfferId = "";
     activeZoomImage = null;
+    walletActionStatus = "";
+    renderShell();
+  });
+
+  app.querySelector("[data-action='add-funds']")?.addEventListener("click", () => {
+    walletActionStatus = `Add funds: send Arc Testnet USDC to ${state.wallet.buyerAddress}, or open the Circle faucet button next to this action. The UI updates when a confirmed Arc funding transaction is loaded.`;
+    activeWorkspaceTab = "wallet";
+    renderShell();
+  });
+
+  app.querySelector("[data-action='withdraw-funds']")?.addEventListener("click", () => {
+    walletActionStatus = `Withdraw funds: frontend-only draft. Production will ask for a destination wallet, run TrustRails/scorer policy checks, require buyer confirmation, and submit a Circle Wallets Arc transfer. Available demo balance: ${formatDisplayUsdc(state.wallet.available)}.`;
+    activeWorkspaceTab = "wallet";
     renderShell();
   });
 

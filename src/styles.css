@@ -998,6 +998,17 @@ code {
   gap: 8px;
 }
 
+.wallet-action-status {
+  border: 1.5px solid rgba(17, 32, 31, 0.2);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: #fffefa;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .ledger {
   display: grid;
   grid-template-columns: 1fr 1fr;
