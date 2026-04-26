@@ -53,6 +53,10 @@ New demo proof: the Costume Store includes a Nano Banana virtual try-on. Click t
 
 Cloudflare is the primary demo and production-like surface. The hosted Worker exposes the same local API families for wallet, catalog, merchant offer lookup, scorer checks, checkout evaluation/submission, review chat/approval, Arc balance, Arc settlement, Arc frequency proofs, x402 receipts, and costume try-on. Stateful demo flows are persisted in Cloudflare KV so review-cart actions survive Worker isolate changes, and hosted Arc signing uses Circle Wallets REST plus Worker WebCrypto instead of a raw local private key.
 
+## Nanopayments In The Demo
+
+ShopRails uses nano-transactions for the small agentic actions that happen before checkout: fit and fraud scoring, product listings from each seller, product availability checks, and paid inference for image creation. The Costume Store uses Gemini image generation to show how a selected pirate costume would look on the uploaded person, turning the virtual try-on itself into a paid sub-cent agent action.
+
 ## Screenshots
 
 ![ShopRails agent activity and proof panel](docs/screenshots/shoprails-agent-proof-log.png)
