@@ -15,6 +15,8 @@ let liveStatus = "";
 let imageStatus = "";
 let tryOnStatus = "";
 let aiTestStatus = null;
+let activeOfferId = null;
+let loadingTryOnOfferId = "";
 let llmMode = "gemini";
 let imageMode = "gemini";
 let llmConfig = null;
@@ -1260,11 +1262,86 @@ function renderCostumeTryOnPanel(costumeOffers) {
   `;
 }
 
+function renderPutOnButton(offer, label = "Put on") {
+  const isLoading = loadingTryOnOfferId === offer.id;
+  const isDisabled = !state.tryOn?.personImageUrl || Boolean(loadingTryOnOfferId);
+  return `
+    <button
+      class="secondary put-on-button ${isLoading ? "loading" : ""}"
+      type="button"
+      data-action="put-on-costume"
+      data-offer-id="${offer.id}"
+      ${isDisabled ? "disabled" : ""}
+      aria-label="Generate virtual try-on for ${offer.name}"
+      aria-busy="${isLoading ? "true" : "false"}"
+    >
+      ${isLoading ? `<span class="button-spinner" aria-hidden="true"></span><span>Generating</span>` : label}
+    </button>
+  `;
+}
+
+function renderOfferDetailsPanel(store, merchant, offer, isCostumeStore) {
+  const badge = commerceBadgeForOffer(offer);
+  const nanoEndpoints = [
+    { label: "Catalog search", endpoint: "/api/catalog/search", price: "0.000001 USDC" },
+    { label: "Availability", endpoint: "/api/availability", price: "0.000001 USDC" },
+    { label: "Scorer", endpoint: "/api/scorer/evaluate", price: "0.000001 USDC" },
+    ...(isCostumeStore && offer.category === "costumes"
+      ? [{ label: "Visualization", endpoint: "/api/visualize-costume", price: "0.000001 USDC" }]
+      : [{ label: "Quote", endpoint: "/api/quote", price: "0.000001 USDC" }])
+  ];
+
+  return `
+    <section class="offer-details-panel" data-shoprails-offer-id="${offer.id}" data-ai-description="Expanded offer details for agent review. Includes seller, delivery window, policy state, scorer risk, and paid API endpoints.">
+      <div class="offer-detail-media">
+        <img src="${offer.image}" alt="${offer.name} expanded product image">
+        <span class="store-badge ${badge.className}">${badge.label}</span>
+      </div>
+      <div class="offer-detail-body">
+        <div class="offer-detail-heading">
+          <div>
+            <p class="eyebrow">Selected offer</p>
+            <h3>${offer.name}</h3>
+            <p>${offer.reason}</p>
+          </div>
+          <button class="ghost-light compact-button" type="button" data-action="close-offer" aria-label="Close selected offer details">Close</button>
+        </div>
+        <div class="offer-detail-grid">
+          <span><b>Seller</b>${merchant.name}</span>
+          <span><b>Domain</b>${merchant.domain}</span>
+          <span><b>Price</b>${formatUsdc(offer.price)}</span>
+          <span><b>Delivery</b>${offer.deliveryWindow}</span>
+          <span><b>Risk score</b>${offer.riskScore}</span>
+          <span><b>Brand</b>${offer.brand}</span>
+        </div>
+        <div class="offer-detail-wallet">
+          <span>Seller wallet</span>
+          <a href="${arcAddressUrl(merchant.wallet)}" target="_blank" rel="noreferrer">${shortAddress(merchant.wallet)}</a>
+        </div>
+        <div class="offer-endpoints" aria-label="Paid API actions for this offer">
+          ${nanoEndpoints.map((action) => `
+            <span>
+              <b>${action.label}</b>
+              <small>${action.endpoint}</small>
+              <em>${action.price}</em>
+            </span>
+          `).join("")}
+        </div>
+        <div class="offer-detail-actions">
+          <button class="primary" type="button">Add to intent</button>
+          ${isCostumeStore && offer.category === "costumes" ? renderPutOnButton(offer) : ""}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderCommerceStore(store, merchant, offers) {
   const heroOffer = offers[0];
   const cartTotal = offers.reduce((sum, offer) => sum + offer.price, 0);
   const isCostumeStore = store.id === "costumes";
   const costumeOffers = offers.filter((offer) => offer.category === "costumes");
+  const selectedOffer = offers.find((offer) => offer.id === activeOfferId);
 
   return `
     <div class="commerce-store" data-ai-description="ShopRails merchant storefront for ${merchant.name}. Product cards expose machine-readable offer IDs, delivery windows, prices, and risk signals.">
@@ -1332,16 +1409,15 @@ function renderCommerceStore(store, merchant, offers) {
                       <span>${offer.brand}</span>
                     </div>
                     <div class="product-actions">
-                      <button class="ghost-light" type="button">View offer</button>
+                      <button
+                        class="ghost-light view-offer-button ${activeOfferId === offer.id ? "active" : ""}"
+                        type="button"
+                        data-action="view-offer"
+                        data-offer-id="${offer.id}"
+                        aria-expanded="${activeOfferId === offer.id ? "true" : "false"}"
+                      >${activeOfferId === offer.id ? "Viewing" : "View offer"}</button>
                       ${isCostumeStore && offer.category === "costumes" ? `
-                        <button
-                          class="secondary put-on-button"
-                          type="button"
-                          data-action="put-on-costume"
-                          data-offer-id="${offer.id}"
-                          ${state.tryOn?.personImageUrl ? "" : "disabled"}
-                          aria-label="Generate virtual try-on for ${offer.name}"
-                        >Put on</button>
+                        ${renderPutOnButton(offer)}
                       ` : ""}
                     </div>
                   </div>
@@ -1349,6 +1425,7 @@ function renderCommerceStore(store, merchant, offers) {
               `;
             }).join("")}
           </div>
+          ${selectedOffer ? renderOfferDetailsPanel(store, merchant, selectedOffer, isCostumeStore) : ""}
         </section>
       </div>
     </div>
@@ -1529,6 +1606,8 @@ function bindEvents() {
       imageStatus = "";
       tryOnStatus = "";
       liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc transaction proof, and reviewed cart approval.";
+      activeOfferId = null;
+      loadingTryOnOfferId = "";
       renderShell();
       try {
         const response = await fetch("/api/demo/full", {
@@ -1573,6 +1652,8 @@ function bindEvents() {
     imageStatus = "";
     tryOnStatus = "";
     aiTestStatus = null;
+    activeOfferId = null;
+    loadingTryOnOfferId = "";
     renderShell();
   });
 
@@ -1597,8 +1678,22 @@ function bindEvents() {
     button.addEventListener("click", () => {
       activeStore = button.dataset.store;
       activeInstruction = null;
+      activeOfferId = null;
       renderShell();
     });
+  });
+
+  app.querySelectorAll("[data-action='view-offer']").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeOfferId = button.dataset.offerId;
+      activeWorkspaceTab = "stores";
+      renderShell();
+    });
+  });
+
+  app.querySelector("[data-action='close-offer']")?.addEventListener("click", () => {
+    activeOfferId = null;
+    renderShell();
   });
 
   app.querySelector("[data-action='load-tryon-photo']")?.addEventListener("click", () => {
@@ -1621,6 +1716,8 @@ function bindEvents() {
       const personImageUrl = state.tryOn?.personImageUrl || TRY_ON_PERSON_IMAGE;
       activeWorkspaceTab = "stores";
       activeStore = "costumes";
+      activeOfferId = offerId;
+      loadingTryOnOfferId = offerId;
       tryOnStatus = "Generating Nano Banana try-on and creating four Arc nano transactions...";
       renderShell();
       try {
@@ -1638,6 +1735,8 @@ function bindEvents() {
         tryOnStatus = `Try-on ready for ${state.tryOn?.selectedOfferName || offerId}. ${liveCount} ArcScan nano tx link(s) available in Wallet.`;
       } catch (error) {
         tryOnStatus = `Try-on failed: ${error.message}`;
+      } finally {
+        loadingTryOnOfferId = "";
       }
       renderShell();
     });
