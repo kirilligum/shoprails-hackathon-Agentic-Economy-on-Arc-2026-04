@@ -344,7 +344,7 @@ function renderWorkspaceTabs({ autoBought, pendingReview, releasedReview, declin
     },
     {
       id: "cart",
-      label: "Review cart",
+      label: "Client",
       detail: `${pendingReview} pending, ${releasedReview} released`
     },
     {
@@ -506,7 +506,7 @@ function renderShell() {
       <section class="panel tab-panel cart-panel" ${tabPanelAttrs("cart")}>
         <div class="section-head">
           <div>
-            <p class="eyebrow">Shopping cart review</p>
+            <p class="eyebrow">Client checkout chat</p>
             <h2>${pendingReview} pending, ${releasedReview} released, ${autoBought} buy now, ${declined} declined</h2>
           </div>
           <div class="cart-actions">
@@ -786,6 +786,82 @@ function renderNanoAnalytics() {
   `;
 }
 
+function cartExplanationRows() {
+  return state.reviewCart.length ? state.reviewCart : [...state.orders, ...state.declined];
+}
+
+function deterministicCartExplanation() {
+  const rows = cartExplanationRows();
+  if (!rows.length) return "No items are waiting for review.";
+  return rows.map((item) => `${item.offerName}: ${item.agentReason}`).join("\n");
+}
+
+function cartExplanationPrompt() {
+  const rows = cartExplanationRows();
+  return [
+    "Explain the ShopRails client checkout cart in first person as the shopping agent.",
+    "Be concise and demo-safe. Mention why each reviewed item was chosen, why buy-now items were safe, and why blacklisted items were declined.",
+    `Mission: ${state.mission.prompt}`,
+    `Buy-now items: ${state.orders.filter((item) => item.stage === DecisionStage.BUY_NOW).map((item) => `${item.offerName} (${item.onchainAmount || item.amount} USDC on Arc)`).join("; ") || "none"}`,
+    `Review escrow items: ${state.reviewCart.map((item) => `${item.offerName} (${item.agentReason})`).join("; ") || "none"}`,
+    `Declined items: ${state.declined.map((item) => `${item.offerName} (${item.reasons[0]})`).join("; ") || "none"}`,
+    `Rows available to explain: ${rows.map((item) => `${item.offerName}: ${item.agentReason}`).join(" | ")}`
+  ].join("\n");
+}
+
+async function explainCartFromUi(message) {
+  addChatLine("Buyer", message);
+  const fallback = deterministicCartExplanation();
+
+  if (llmMode !== "gemini") {
+    addChatLine("Shopping Cart", fallback);
+    state.toolLog.unshift({
+      id: `log-${state.toolLog.length + 1}`,
+      at: new Date().toISOString(),
+      name: "review.chat",
+      input: { message },
+      output: { reply: fallback, mode: "deterministic" }
+    });
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/llm/call", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        llmMode: "gemini",
+        name: "client.explain_cart",
+        prompt: cartExplanationPrompt(),
+        fallback
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      throw new Error(payload.error || "Gemini cart explanation failed");
+    }
+    const text = payload.text || fallback;
+    addChatLine("Shopping Cart", text);
+    state.llmLog.unshift({
+      id: `llm-${state.llmLog.length + 1}`,
+      at: new Date().toISOString(),
+      model: `${payload.provider === "gemini" ? "Gemini" : payload.provider} ${payload.model}`.trim(),
+      name: "client.explain_cart",
+      prompt: cartExplanationPrompt(),
+      output: text
+    });
+    state.toolLog.unshift({
+      id: `log-${state.toolLog.length + 1}`,
+      at: new Date().toISOString(),
+      name: "review.chat",
+      input: { message },
+      output: { reply: text, mode: payload.provider || "gemini" }
+    });
+  } catch (error) {
+    addChatLine("Shopping Cart", `${fallback}\n\nGemini explanation was unavailable, so this response used the deterministic ShopRails cart explanation: ${error.message}`);
+  }
+}
+
 function renderLlmLog() {
   if (!state.llmLog.length) return `<p class="empty log-empty">Click Run agent plan to show the LLM calls.</p>`;
 
@@ -963,10 +1039,15 @@ async function submitCartCommand(message) {
   }
 
   activeWorkspaceTab = "cart";
-  reviewChat(state, { message: trimmed });
   if (/why|explain|reason/i.test(trimmed)) {
+    await explainCartFromUi(trimmed);
     chatDraft = "confirm all reviewed items";
-  } else if (/confirm all reviewed items/i.test(trimmed)) {
+    renderShell();
+    return;
+  }
+
+  reviewChat(state, { message: trimmed });
+  if (/confirm all reviewed items/i.test(trimmed)) {
     chatDraft = "show me the Arc transactions";
     liveStatus = "Review escrow released. The cart chat includes clickable ArcScan transaction URLs.";
   } else {

@@ -33,7 +33,7 @@ For merchants and API sellers, this also unlocks sub-cent pricing. A catalog que
 
 ## System Architecture
 
-ShopRails is one local web app with four demo surfaces: buyer wallet and policy console, review shopping cart with chat, agent activity/proof log, and three mini merchant stores for sushi delivery, pirate costumes, and human assistant services.
+ShopRails is one local web app with four demo surfaces: buyer wallet and policy console, client checkout chat, agent activity/proof log, and three mini merchant stores for sushi delivery, pirate costumes, and human assistant services.
 
 ```mermaid
 flowchart LR
@@ -193,7 +193,7 @@ Short description:
 
 Long description:
 
-ShopRails is a commerce rail for AI agents. Today, LLMs are prevented from entering card data because a card is too broad and too risky for autonomous shopping. ShopRails gives agents a safer path: buyers deposit demo USDC, set spend limits and merchant rules, and let an agent shop across storefronts that are both human-visible and machine-readable. Each purchase intent passes through a deterministic policy engine, risk signals, and approval stages. Low-risk items settle immediately on Arc. Higher-control purchases, like hiring a human assistant, are held in an escrow contract until the buyer confirms the review cart. The demo uses Circle Wallets, Circle x402/Gateway Nanopayments, USDC, Arc Testnet settlement, Gemini planning calls, and Nano Banana image generation to prove agentic commerce with real payment evidence.
+ShopRails is a commerce rail for AI agents. Today, LLMs are prevented from entering card data because a card is too broad and too risky for autonomous shopping. ShopRails gives agents a safer path: buyers deposit demo USDC, set spend limits and merchant rules, and let an agent shop across storefronts that are both human-visible and machine-readable. Each purchase intent passes through a deterministic policy engine, risk signals, and approval stages. Low-risk items settle immediately on Arc. Higher-control purchases, like hiring a human assistant, are held in an escrow contract until the buyer confirms the client checkout cart. The demo uses Circle Wallets, Circle x402/Gateway Nanopayments, USDC, Arc Testnet settlement, Gemini planning calls, and Nano Banana image generation to prove agentic commerce with real payment evidence.
 
 Challenge track:
 
