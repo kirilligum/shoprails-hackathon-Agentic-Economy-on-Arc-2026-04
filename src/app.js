@@ -976,14 +976,7 @@ function renderShell() {
         </div>
         ${renderTransactionLedger()}
         ${renderRiskStory()}
-        <div class="policy-grid">
-          ${Object.entries(state.policy.autoApproveByCategory).map(([category, value]) => `
-            <label>
-              <span>${category}</span>
-              <input type="number" value="${value}" min="0" data-policy="${category}" data-ai-description="Auto-buy limit for ${category} purchases before ShopRails routes the item to buyer review.">
-            </label>
-          `).join("")}
-        </div>
+        ${renderSpendPolicyControls()}
       </section>
 
       <section class="panel tab-panel cart-panel" ${tabPanelAttrs("cart")}>
@@ -1420,6 +1413,142 @@ function renderNanoAnalytics() {
         <span><b>scorer</b>${state.scorer.provider.priceUsdc.toFixed(6)} USDC/check</span>
       </div>
     </div>
+  `;
+}
+
+function renderSpendPolicyControls() {
+  const dailyCap = state.policy.totalBudget;
+  const merchantCap = state.policy.merchantDailyCap;
+  const categoryEntries = Object.entries(state.policy.categoryCaps || {});
+  const autoEntries = Object.entries(state.policy.autoApproveByCategory || {});
+  const allowlisted = state.policy.whitelistedDomains || [];
+  const blacklisted = state.policy.blacklistedDomains || [];
+  const activeAllowlisted = allowlisted.filter((domain) => !blacklisted.includes(domain));
+  const blacklistedBrands = state.policy.blacklistedBrands || [];
+  const alwaysReview = state.policy.alwaysReviewCategories || [];
+  const sellerCaps = Object.values(state.merchants).map((merchant) => {
+    const spent = Number(state.merchantSpend[merchant.id] || 0);
+    const isBlocked = blacklisted.includes(merchant.domain);
+    const sellerCap = state.policy.sellerDailyCaps?.[merchant.id] ?? merchantCap;
+    const cap = isBlocked ? 0 : sellerCap;
+    return { merchant, spent, cap, isBlocked };
+  });
+
+  return `
+    <section class="spend-policy-panel" data-ai-description="Buyer-configured spending limits and seller block controls. This UI is currently frontend-only; a production scorer would receive these fields in the policy payload before returning Buy Now, Review, or Blacklisted.">
+      <div class="section-head compact-head">
+        <div>
+          <h3>Scorer policy setup</h3>
+          <p>Frontend-only controls for the next backend pass. TrustRails will use these limits with buyer history and seller reputation.</p>
+        </div>
+        <span class="rail">feeds scorer</span>
+      </div>
+      <div class="spend-limit-grid">
+        <label class="policy-field featured-field">
+          <span>Daily spend limit</span>
+          <input type="number" value="${dailyCap}" min="0" step="1" data-policy-ui="totalBudget" data-ai-description="Maximum total USDC the buyer allows the agent to commit during one day across all sellers and categories. The scorer should treat attempts above this as decline or review.">
+          <small>Global buyer budget for the agent session.</small>
+        </label>
+        <label class="policy-field featured-field">
+          <span>Default per-seller daily cap</span>
+          <input type="number" value="${merchantCap}" min="0" step="1" data-policy-ui="merchantDailyCap" data-ai-description="Maximum USDC the buyer allows the agent to spend with any one seller in a day unless a seller-specific override exists. The scorer uses this to catch concentration risk and duplicate buying.">
+          <small>Applies to every non-blocked seller below.</small>
+        </label>
+        <label class="policy-field">
+          <span>Review risk threshold</span>
+          <input type="number" value="${state.policy.reviewRiskScore}" min="0" max="100" step="1" data-policy-ui="reviewRiskScore" data-ai-description="Scorer risk score at or above this value should route the item to buyer review before payment.">
+          <small>Higher score means more risk.</small>
+        </label>
+        <label class="policy-field">
+          <span>Decline risk threshold</span>
+          <input type="number" value="${state.policy.declineRiskScore}" min="0" max="100" step="1" data-policy-ui="declineRiskScore" data-ai-description="Scorer risk score at or above this value should decline the item before payment signing.">
+          <small>Hard stop boundary.</small>
+        </label>
+      </div>
+
+      <div class="seller-limit-table">
+        <div class="seller-limit-head">
+          <span>Seller</span>
+          <span>Daily cap</span>
+          <span>Spent today</span>
+          <span>Policy status</span>
+        </div>
+        ${sellerCaps.map(({ merchant, spent, cap, isBlocked }) => `
+          <div class="seller-limit-row ${isBlocked ? "blocked" : ""}" data-ai-description="Seller-specific policy row for scorer input. Agents should respect blocked sellers, per-seller caps, and current spend before creating purchase intents.">
+            <div>
+              <b>${merchant.name}</b>
+              <small>${merchant.domain}</small>
+            </div>
+            <label>
+              <input type="number" value="${cap}" min="0" step="1" data-seller-cap="${merchant.id}" data-ai-description="Per-day USDC cap for ${merchant.name}. Frontend-only demo control for scorer policy input.">
+            </label>
+            <span>${formatUsdc(spent)}</span>
+            <label class="block-toggle">
+              <input type="checkbox" ${isBlocked ? "checked" : ""} data-seller-blocklist="${merchant.domain}" data-ai-description="Blacklist toggle for ${merchant.domain}. Checked means the scorer should return Blacklisted and the buyer agent must not sign payment.">
+              <span>${isBlocked ? "Blacklisted" : merchant.trustTier === "trusted" ? "Trusted" : "Allowed"}</span>
+            </label>
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="policy-columns">
+        <div class="policy-box">
+          <h4>Auto-approve by category</h4>
+          <p>Below this amount, allowlisted sellers can be Buy Now unless scorer risk or caps override.</p>
+          <div class="policy-chip-grid">
+            ${autoEntries.map(([category, value]) => `
+              <label class="policy-mini-field">
+                <span>${category}</span>
+                <input type="number" value="${value}" min="0" data-policy="${category}" data-ai-description="Auto-buy limit for ${category} purchases before ShopRails routes the item to buyer review.">
+              </label>
+            `).join("")}
+          </div>
+        </div>
+        <div class="policy-box">
+          <h4>Category daily caps</h4>
+          <p>The scorer should compare item amount plus current category spend against these limits.</p>
+          <div class="policy-chip-grid">
+            ${categoryEntries.map(([category, value]) => `
+              <label class="policy-mini-field">
+                <span>${category}</span>
+                <input type="number" value="${value}" min="0" data-category-cap="${category}" data-ai-description="Daily USDC cap for ${category}. Frontend-only demo control that will be sent to TrustRails scorer later.">
+              </label>
+            `).join("")}
+          </div>
+        </div>
+        <div class="policy-box policy-list-box">
+          <h4>Blacklist and review lists</h4>
+          <p>These values are sent to scorer as hard constraints and review hints.</p>
+          <div class="policy-list">
+            <b>Blacklisted sellers</b>
+            ${blacklisted.map((domain) => `<span class="blocked-chip">${domain}</span>`).join("")}
+          </div>
+          <div class="policy-list">
+            <b>Blacklisted brands</b>
+            ${blacklistedBrands.map((brand) => `<span class="blocked-chip">${brand}</span>`).join("")}
+          </div>
+          <div class="policy-list">
+            <b>Always review</b>
+            ${alwaysReview.map((category) => `<span>${category}</span>`).join("")}
+          </div>
+          <div class="policy-list">
+            <b>Allowlisted sellers</b>
+            ${activeAllowlisted.map((domain) => `<span>${domain}</span>`).join("")}
+          </div>
+        </div>
+        <div class="policy-box scorer-preview-box">
+          <h4>Scorer input preview</h4>
+          <p>What the buyer server will attach to <code>/api/scorer/evaluate</code>.</p>
+          <pre>{
+  "dailySpendLimitUsdc": ${dailyCap},
+  "perSellerDailyCapUsdc": ${merchantCap},
+  "blockedSellerCount": ${blacklisted.length},
+  "reviewRiskScore": ${state.policy.reviewRiskScore},
+  "declineRiskScore": ${state.policy.declineRiskScore}
+}</pre>
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -2290,6 +2419,43 @@ function bindEvents() {
   app.querySelectorAll("[data-policy]").forEach((input) => {
     input.addEventListener("change", () => {
       state.policy.autoApproveByCategory[input.dataset.policy] = Number(input.value);
+    });
+  });
+
+  app.querySelectorAll("[data-policy-ui]").forEach((input) => {
+    input.addEventListener("change", () => {
+      state.policy[input.dataset.policyUi] = Number(input.value);
+      renderShell();
+    });
+  });
+
+  app.querySelectorAll("[data-category-cap]").forEach((input) => {
+    input.addEventListener("change", () => {
+      state.policy.categoryCaps[input.dataset.categoryCap] = Number(input.value);
+      renderShell();
+    });
+  });
+
+  app.querySelectorAll("[data-seller-cap]").forEach((input) => {
+    input.addEventListener("change", () => {
+      state.policy.sellerDailyCaps = {
+        ...(state.policy.sellerDailyCaps || {}),
+        [input.dataset.sellerCap]: Number(input.value)
+      };
+    });
+  });
+
+  app.querySelectorAll("[data-seller-blocklist]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const domain = input.dataset.sellerBlocklist;
+      const current = new Set(state.policy.blacklistedDomains || []);
+      if (input.checked) {
+        current.add(domain);
+      } else {
+        current.delete(domain);
+      }
+      state.policy.blacklistedDomains = [...current];
+      renderShell();
     });
   });
 
