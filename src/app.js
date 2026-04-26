@@ -1,8 +1,7 @@
 import { atomicQueries, storefronts } from "./data.js";
 import {
   createInitialState,
-  reviewChat,
-  runDemoMission
+  reviewChat
 } from "./shoprails-tools.js";
 import { DecisionStage, formatUsdc, getMerchant } from "./policy.js";
 
@@ -14,7 +13,7 @@ let chatDraft = state.mission.prompt;
 let liveStatus = "";
 let imageStatus = "";
 let aiTestStatus = null;
-let llmMode = "mock";
+let llmMode = "gemini";
 let imageMode = "gemini";
 let llmConfig = null;
 
@@ -552,11 +551,10 @@ function renderAiRuntimeControls() {
     <div class="runtime-row">
       <div>
         <b>LLM calls</b>
-        <span>${llmMode === "gemini" ? textModel : "mock-shoprails-llm"} · ${keyStatus}</span>
+        <span>${textModel} · ${keyStatus} · live only</span>
       </div>
       <div class="segmented" role="group" aria-label="LLM runtime">
-        <button class="${llmMode === "mock" ? "active" : ""}" data-llm-mode="mock">Mock</button>
-        <button class="${llmMode === "gemini" ? "active" : ""}" data-llm-mode="gemini">Gemini</button>
+        <button class="active" data-llm-mode="gemini">Gemini live</button>
       </div>
       <div>
         <b>Images</b>
@@ -790,40 +788,54 @@ function cartExplanationRows() {
   return state.reviewCart.length ? state.reviewCart : [...state.orders, ...state.declined];
 }
 
-function deterministicCartExplanation() {
+function cartReferenceAnswer(message = "explain the cart") {
   const rows = cartExplanationRows();
   if (!rows.length) return "No items are waiting for review.";
-  return rows.map((item) => `${item.offerName}: ${item.agentReason}`).join("\n");
-}
 
-function cartExplanationPrompt() {
-  const rows = cartExplanationRows();
+  if (/tx|transaction|arcscan|proof|link/i.test(message)) {
+    return transactionChatReply();
+  }
+
   return [
-    "Explain the ShopRails client checkout cart in first person as the shopping agent.",
-    "Be concise and demo-safe. Mention why each reviewed item was chosen, why buy-now items were safe, and why blacklisted items were declined.",
-    `Mission: ${state.mission.prompt}`,
-    `Buy-now items: ${state.orders.filter((item) => item.stage === DecisionStage.BUY_NOW).map((item) => `${item.offerName} (${item.onchainAmount || item.amount} USDC on Arc)`).join("; ") || "none"}`,
-    `Review escrow items: ${state.reviewCart.map((item) => `${item.offerName} (${item.agentReason})`).join("; ") || "none"}`,
-    `Declined items: ${state.declined.map((item) => `${item.offerName} (${item.reasons[0]})`).join("; ") || "none"}`,
-    `Rows available to explain: ${rows.map((item) => `${item.offerName}: ${item.agentReason}`).join(" | ")}`
+    `${state.orders.length} item(s) are already Buy It Now, ${state.reviewCart.length} item(s) are in review escrow, and ${state.declined.length} item(s) were declined.`,
+    ...rows.map((item) => `${item.offerName}: ${item.agentReason}`)
   ].join("\n");
 }
 
-async function explainCartFromUi(message) {
-  addChatLine("Buyer", message);
-  const fallback = deterministicCartExplanation();
+function cartTransactionLines() {
+  return collectArcTransactions().map((tx) => `${tx.label}: ${tx.href} (${formatDisplayUsdc(tx.amount)}, ${tx.status})`);
+}
 
-  if (llmMode !== "gemini") {
-    addChatLine("Shopping Cart", fallback);
-    state.toolLog.unshift({
-      id: `log-${state.toolLog.length + 1}`,
-      at: new Date().toISOString(),
-      name: "review.chat",
-      input: { message },
-      output: { reply: fallback, mode: "deterministic" }
-    });
-    return;
-  }
+function transactionChatReply() {
+  const lines = cartTransactionLines();
+  if (!lines.length) return "No Arc transactions are loaded yet. Run the agent plan first.";
+  return ["Current ArcScan transaction links:", ...lines].join("\n");
+}
+
+function cartChatPrompt(message) {
+  const rows = cartExplanationRows();
+  return [
+    "You are the ShopRails Client checkout assistant talking to the buyer.",
+    "Use only the state below. Do not invent products, prices, sellers, risk reasons, balances, or transaction hashes.",
+    "If the buyer asks for confirmation or release, do not claim funds moved; the deterministic checkout tool performs release only after the explicit confirm command.",
+    "If the buyer asks for transaction links, copy the listed ArcScan URLs exactly.",
+    "Keep the answer concise and practical.",
+    `Buyer message: ${message}`,
+    `Mission: ${state.mission.prompt}`,
+    `Mission status: ${state.mission.status}`,
+    `Wallet: ${formatDisplayUsdc(state.wallet.available)} available, ${formatDisplayUsdc(state.wallet.escrowed)} escrowed, ${formatDisplayUsdc(state.wallet.spent)} spent`,
+    `Buy-now items: ${state.orders.filter((item) => item.stage === DecisionStage.BUY_NOW).map((item) => `${item.offerName} (${item.onchainAmount || item.amount} USDC on Arc)`).join("; ") || "none"}`,
+    `Review escrow items: ${state.reviewCart.map((item) => `${item.offerName} (${item.agentReason})`).join("; ") || "none"}`,
+    `Declined items: ${state.declined.map((item) => `${item.offerName} (${item.reasons[0]})`).join("; ") || "none"}`,
+    `Rows available to explain: ${rows.map((item) => `${item.offerName}: ${item.agentReason}; decision=${stageLabel(item.stage)}; status=${item.escrowStatus}; risk=${item.reasons[0]}`).join(" | ") || "none"}`,
+    `Arc transactions: ${cartTransactionLines().join(" | ") || "none yet"}`,
+    `Reference answer shape: ${cartReferenceAnswer(message)}`
+  ].join("\n");
+}
+
+async function answerCartFromUi(message) {
+  addChatLine("Buyer", message);
+  const reference = cartReferenceAnswer(message);
 
   try {
     const response = await fetch("/api/llm/call", {
@@ -831,23 +843,23 @@ async function explainCartFromUi(message) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         llmMode: "gemini",
-        name: "client.explain_cart",
-        prompt: cartExplanationPrompt(),
-        fallback
+        name: /why|explain|reason/i.test(message) ? "client.explain_cart" : "client.chat",
+        prompt: cartChatPrompt(message),
+        fallback: reference
       })
     });
     const payload = await response.json();
     if (!response.ok || payload.error) {
       throw new Error(payload.error || "Gemini cart explanation failed");
     }
-    const text = payload.text || fallback;
+    const text = payload.text || reference;
     addChatLine("Shopping Cart", text);
     state.llmLog.unshift({
       id: `llm-${state.llmLog.length + 1}`,
       at: new Date().toISOString(),
       model: `${payload.provider === "gemini" ? "Gemini" : payload.provider} ${payload.model}`.trim(),
-      name: "client.explain_cart",
-      prompt: cartExplanationPrompt(),
+      name: /why|explain|reason/i.test(message) ? "client.explain_cart" : "client.chat",
+      prompt: cartChatPrompt(message),
       output: text
     });
     state.toolLog.unshift({
@@ -858,7 +870,7 @@ async function explainCartFromUi(message) {
       output: { reply: text, mode: payload.provider || "gemini" }
     });
   } catch (error) {
-    addChatLine("Shopping Cart", `${fallback}\n\nGemini explanation was unavailable, so this response used the deterministic ShopRails cart explanation: ${error.message}`);
+    addChatLine("Shopping Cart", `Real Gemini chat is unavailable right now, so I did not generate a mock LLM response. ${error.message}`);
   }
 }
 
@@ -993,7 +1005,7 @@ async function runMissionFromUi({ sourceMessage = "", keepTab = "mission" } = {}
   state.proofs = { ...state.proofs, ...cachedProofs };
   if (buyerMessage) addChatLine("Buyer", buyerMessage);
   chatDraft = "explain the cart";
-  liveStatus = `Running ${llmMode === "gemini" ? "Gemini" : "mock"} LLM calls and loading verified Arc transactions at price / 100,000.`;
+  liveStatus = "Running real Gemini LLM calls and loading verified Arc transactions at price / 100,000.";
   renderShell();
 
   try {
@@ -1015,15 +1027,14 @@ async function runMissionFromUi({ sourceMessage = "", keepTab = "mission" } = {}
       `Agent plan complete. ${state.orders.length} item(s) are Buy It Now, ${state.reviewCart.length} item(s) are in review escrow, and ${state.declined.length} item(s) were declined before signing.`
     );
     chatDraft = "explain the cart";
-    liveStatus = `${llmMode === "gemini" ? "Gemini" : "Mock"} LLM calls logged. Verified Arc transaction links are loaded at price / 100,000.`;
+    liveStatus = "Real Gemini LLM calls logged. Verified Arc transaction links are loaded at price / 100,000.";
   } catch (error) {
     state = createInitialState();
     state.proofs = { ...state.proofs, ...cachedProofs };
     if (buyerMessage) addChatLine("Buyer", buyerMessage);
-    runDemoMission(state);
-    addChatLine("Shopping Cart", `Agent plan complete using deterministic fallback calls. ${state.reviewCart.length} item(s) need review escrow.`);
-    chatDraft = "explain the cart";
-    liveStatus = `Server LLM route was unavailable (${error.message}); fell back to deterministic mock calls.`;
+    addChatLine("Shopping Cart", `Real Gemini planning failed, so ShopRails did not generate a mock plan. Check the server key/provider and retry. ${error.message}`);
+    chatDraft = state.mission.prompt;
+    liveStatus = `Real Gemini planning failed: ${error.message}`;
   }
   activeWorkspaceTab = keepTab;
   renderShell();
@@ -1040,17 +1051,29 @@ async function submitCartCommand(message) {
 
   activeWorkspaceTab = "cart";
   if (/why|explain|reason/i.test(trimmed)) {
-    await explainCartFromUi(trimmed);
+    await answerCartFromUi(trimmed);
     chatDraft = "confirm all reviewed items";
     renderShell();
     return;
   }
 
-  reviewChat(state, { message: trimmed });
   if (/confirm all reviewed items/i.test(trimmed)) {
+    reviewChat(state, { message: trimmed });
     chatDraft = "show me the Arc transactions";
     liveStatus = "Review escrow released. The cart chat includes clickable ArcScan transaction URLs.";
+  } else if (/tx|transaction|arcscan|proof|link/i.test(trimmed)) {
+    addChatLine("Buyer", trimmed);
+    addChatLine("Shopping Cart", transactionChatReply());
+    state.toolLog.unshift({
+      id: `log-${state.toolLog.length + 1}`,
+      at: new Date().toISOString(),
+      name: "review.transactions",
+      input: { message: trimmed },
+      output: { links: cartTransactionLines() }
+    });
+    chatDraft = "confirm all reviewed items";
   } else {
+    await answerCartFromUi(trimmed);
     chatDraft = "confirm all reviewed items";
   }
   renderShell();
@@ -1146,10 +1169,8 @@ function bindEvents() {
 
   app.querySelectorAll("[data-llm-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      llmMode = button.dataset.llmMode;
-      liveStatus = llmMode === "gemini"
-        ? "Gemini mode selected. The next run calls the server-side Gemini provider."
-        : "Mock mode selected. The next run is deterministic and test-safe.";
+      llmMode = "gemini";
+      liveStatus = "Gemini live mode selected. Demo chat and planning do not use mock LLM responses.";
       renderShell();
     });
   });

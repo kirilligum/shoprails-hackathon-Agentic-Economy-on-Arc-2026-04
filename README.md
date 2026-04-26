@@ -187,8 +187,8 @@ CIRCLE_WALLET_ADDRESS=
 
 ## LLM And Images
 
-- Mock mode is deterministic for tests and offline demo resets.
-- Real text calls use `gemini-3.1-flash-lite-preview`, with `gemini-3-flash-preview` as fallback.
+- The demo UI uses live Gemini text calls by default; it does not expose mock LLM mode.
+- Real text calls use `gemini-3.1-flash-lite-preview`, with `gemini-3-flash-preview` as a real fallback model.
 - Product images use the configured Gemini image provider, `gemini-3.1-flash-image-preview` for the Nano Banana 2-style image path.
 - `Test AI providers` verifies real Gemini text, fallback behavior, and image generation from inside the app.
 - Generated product assets live in `artifacts/generated-images`.

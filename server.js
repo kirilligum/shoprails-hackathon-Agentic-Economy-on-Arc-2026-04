@@ -78,7 +78,7 @@ async function routeApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/demo/run") {
-    const llmMode = body.llmMode || url.searchParams.get("llm") || "mock";
+    const llmMode = body.llmMode || url.searchParams.get("llm") || "gemini";
     const result = await runDemoMissionWithLlm(state, createLlmProvider(llmMode));
     return sendJson(res, 200, { result, state });
   }
@@ -103,7 +103,7 @@ async function routeApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/llm/call") {
-    const llm = createLlmProvider(body.llmMode || "mock");
+    const llm = createLlmProvider(body.llmMode || "gemini");
     const result = await llm.generateText({
       name: body.name || "llm.demo_call",
       prompt: body.prompt || "Explain ShopRails in one sentence.",

@@ -1,8 +1,97 @@
 import { atomicQueries, offers } from "../src/data.js";
-import { createInitialState, getNanopaymentReceipt, reviewChat, runDemoMission } from "../src/shoprails-tools.js";
+import { createInitialState, getNanopaymentReceipt, reviewChat, runDemoMissionWithLlm } from "../src/shoprails-tools.js";
 
 const TEXT_MODEL = "gemini-3.1-flash-lite-preview";
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+const TEXT_FALLBACK_MODEL = "gemini-3-flash-preview";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+function textFromGeminiResponse(payload) {
+  return (payload.candidates || [])
+    .flatMap((candidate) => candidate.content?.parts || [])
+    .map((part) => part.text)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+async function callGeminiText(env, model, { name, prompt, fallback }) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("Hosted Gemini is not configured. Add GEMINI_API_KEY as a Cloudflare Worker secret.");
+  }
+
+  const responseStyle = String(name || "").startsWith("client.")
+    ? "Answer the buyer in 2-5 concise lines. Use only the provided ShopRails facts. Copy transaction URLs exactly when they are relevant."
+    : "Return one concise demo-safe sentence. Use only the provided ShopRails facts.";
+  const body = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: [
+              "You are the ShopRails hackathon agent planner.",
+              responseStyle,
+              "Do not include secrets, private keys, or invented transaction hashes.",
+              `Call: ${name}`,
+              `Prompt: ${prompt}`,
+              fallback ? `Reference facts and preferred shape: ${fallback}` : ""
+            ].filter(Boolean).join("\n")
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: String(name || "").startsWith("client.") ? 320 : 140
+    }
+  };
+
+  const responsePayload = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-goog-api-key": env.GEMINI_API_KEY
+    },
+    body: JSON.stringify(body)
+  });
+  const raw = await responsePayload.text();
+  let payload;
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch {
+    payload = { error: { message: raw } };
+  }
+  if (!responsePayload.ok) {
+    throw new Error(payload.error?.message || `Gemini request failed with ${responsePayload.status}`);
+  }
+
+  const text = textFromGeminiResponse(payload);
+  if (!text) throw new Error(`Gemini model ${model} returned no text.`);
+  return text;
+}
+
+function createHostedLlmProvider(env) {
+  return {
+    provider: "gemini",
+    model: TEXT_MODEL,
+    async generateText(input) {
+      try {
+        return {
+          provider: "gemini",
+          model: TEXT_MODEL,
+          text: await callGeminiText(env, TEXT_MODEL, input)
+        };
+      } catch (primaryError) {
+        return {
+          provider: "gemini",
+          model: TEXT_FALLBACK_MODEL,
+          text: await callGeminiText(env, TEXT_FALLBACK_MODEL, input)
+        };
+      }
+    }
+  };
+}
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload, null, 2), {
@@ -99,7 +188,7 @@ function cachedAiProof() {
       url: "/artifacts/generated-images/shoprails-ai-self-test-gemini-3-1-flash-image-preview.png",
       cached: true
     },
-    note: "Hosted replay uses cached real Gemini and Nano Banana proof artifacts generated before deployment."
+    note: "Hosted Worker uses live Gemini text calls when GEMINI_API_KEY is configured and cached real Nano Banana proof artifacts generated before deployment."
   };
 }
 
@@ -129,7 +218,7 @@ function circleStatus(live, payment) {
       txUrl: payment.txUrl,
       updatedAt: payment.updatedAt
     } : null,
-    note: "Hosted demo replays the real Circle Wallets Arc transfer artifact."
+    note: "Hosted demo serves the real Circle Wallets Arc transfer artifact."
   };
 }
 
@@ -149,14 +238,14 @@ async function handleApi(request, env) {
 
   if (method === "POST" && url.pathname === "/api/demo/run") {
     const state = createInitialState();
-    const result = runDemoMission(state);
+    const result = await runDemoMissionWithLlm(state, createHostedLlmProvider(env));
     state.proofs = { ...state.proofs, ...(await cachedProofs(env, request)), ai: state.proofs.ai };
     return json({ result, state });
   }
 
   if (method === "POST" && url.pathname === "/api/demo/full") {
     const state = createInitialState();
-    const result = runDemoMission(state);
+    const result = await runDemoMissionWithLlm(state, createHostedLlmProvider(env));
     const proofs = await cachedProofs(env, request);
     state.proofs = proofs;
     reviewChat(state, { message: "confirm all reviewed items" });
@@ -165,22 +254,22 @@ async function handleApi(request, env) {
 
   if (method === "GET" && url.pathname === "/api/llm/config") {
     return json({
-      llmProvider: "hosted-replay",
-      imageProvider: "hosted-replay",
+      llmProvider: "gemini",
+      imageProvider: "hosted-cached-images",
       textModel: TEXT_MODEL,
-      textFallbackModel: "gemini-3-flash-preview",
+      textFallbackModel: TEXT_FALLBACK_MODEL,
       imageModel: IMAGE_MODEL,
       fastImageModel: "gemini-2.5-flash-image",
-      geminiKeyConfigured: true
+      geminiKeyConfigured: Boolean(env.GEMINI_API_KEY)
     });
   }
 
   if (method === "POST" && url.pathname === "/api/llm/call") {
-    return json({
-      provider: "hosted-replay",
-      model: TEXT_MODEL,
-      text: body.fallback || "ShopRails lets agents shop with wallet policies, risk review, and Arc USDC settlement."
-    });
+    return json(await createHostedLlmProvider(env).generateText({
+      name: body.name || "llm.demo_call",
+      prompt: body.prompt || "Explain ShopRails in one sentence.",
+      fallback: body.fallback || "ShopRails lets agents shop with wallet policies, risk review, and Arc USDC settlement."
+    }));
   }
 
   if (method === "POST" && url.pathname === "/api/ai/self-test") {
@@ -194,7 +283,7 @@ async function handleApi(request, env) {
     return json({
       assets: offers.filter((offer) => ids.has(offer.id)).map((offer) => ({
         offerId: offer.id,
-        provider: "hosted-replay",
+        provider: "hosted-cached-gemini-image",
         model: IMAGE_MODEL,
         url: offer.image,
         cached: true

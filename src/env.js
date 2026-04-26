@@ -44,7 +44,7 @@ export function shoprailsEnv() {
   loadLocalEnv();
   return {
     geminiApiKey: process.env.GEMINI_API_KEY || "",
-    llmProvider: process.env.SHOPRAILS_LLM_PROVIDER || "mock",
+    llmProvider: process.env.SHOPRAILS_LLM_PROVIDER || "gemini",
     imageProvider: process.env.SHOPRAILS_IMAGE_PROVIDER || "mock",
     textModel: process.env.SHOPRAILS_TEXT_MODEL || "gemini-3.1-flash-lite-preview",
     textFallbackModel: process.env.SHOPRAILS_TEXT_FALLBACK_MODEL || "gemini-3-flash-preview",

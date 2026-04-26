@@ -95,8 +95,8 @@ async function callGemini(model, body, apiKey) {
 export function getLlmRuntimeConfig() {
   const env = shoprailsEnv();
   return {
-    llmProvider: env.llmProvider,
-    imageProvider: env.imageProvider,
+    llmProvider: "gemini",
+    imageProvider: "gemini",
     textModel: env.textModel,
     textFallbackModel: env.textFallbackModel,
     imageModel: env.imageModel,
@@ -127,6 +127,9 @@ export function createLlmProvider(mode = "mock") {
     provider,
     model: env.textModel,
     async generateText({ name, prompt, fallback }) {
+      const responseStyle = String(name || "").startsWith("client.")
+        ? "Answer the buyer in 2-5 concise lines. Use only the provided ShopRails facts. Copy transaction URLs exactly when they are relevant."
+        : "Return one concise demo-safe sentence. Use only the provided ShopRails facts.";
       const body = {
         contents: [
           {
@@ -135,31 +138,40 @@ export function createLlmProvider(mode = "mock") {
               {
                 text: [
                   "You are the ShopRails hackathon agent planner.",
-                  "Return one concise demo-safe sentence. Do not include secrets or private keys.",
+                  responseStyle,
+                  "Do not include secrets, private keys, or invented transaction hashes.",
                   `Call: ${name}`,
                   `Prompt: ${prompt}`,
-                  fallback ? `Expected deterministic fallback: ${fallback}` : ""
+                  fallback ? `Reference facts and preferred shape: ${fallback}` : ""
                 ].filter(Boolean).join("\n")
               }
             ]
           }
-        ]
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: String(name || "").startsWith("client.") ? 320 : 140
+        }
       };
 
       try {
         const payload = await callGemini(env.textModel, body, env.geminiApiKey);
+        const text = textFromGeminiResponse(payload);
+        if (!text) throw new Error(`Gemini model ${env.textModel} returned no text.`);
         return {
           provider,
           model: env.textModel,
-          text: textFromGeminiResponse(payload) || fallback || ""
+          text
         };
       } catch (primaryError) {
         if (!env.textFallbackModel || env.textFallbackModel === env.textModel) throw primaryError;
         const payload = await callGemini(env.textFallbackModel, body, env.geminiApiKey);
+        const text = textFromGeminiResponse(payload);
+        if (!text) throw new Error(`Gemini fallback model ${env.textFallbackModel} returned no text.`);
         return {
           provider,
           model: env.textFallbackModel,
-          text: textFromGeminiResponse(payload) || fallback || ""
+          text
         };
       }
     }
