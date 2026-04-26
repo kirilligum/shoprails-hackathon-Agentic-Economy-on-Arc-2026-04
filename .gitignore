@@ -6,6 +6,7 @@ artifacts/arc-demo-wallet.json
 artifacts/circle-wallets-recovery/
 artifacts/edge-*/
 artifacts/*-profile/
+artifacts/*.log
 dist/
 server.log
 server.err

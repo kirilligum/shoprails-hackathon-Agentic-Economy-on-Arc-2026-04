@@ -4,6 +4,7 @@ import {
   reviewChat
 } from "./shoprails-tools.js";
 import { DecisionStage, formatUsdc, getMerchant } from "./policy.js";
+import { TRY_ON_PERSON_IMAGE } from "./try-on.js";
 
 let state = createInitialState();
 let activeWorkspaceTab = "cart";
@@ -12,6 +13,7 @@ let activeInstruction = null;
 let chatDraft = state.mission.prompt;
 let liveStatus = "";
 let imageStatus = "";
+let tryOnStatus = "";
 let aiTestStatus = null;
 let llmMode = "gemini";
 let imageMode = "gemini";
@@ -77,6 +79,30 @@ function renderChatText(value) {
 
 function addChatLine(from, text) {
   state.chat.push({ from, text, at: new Date().toISOString() });
+}
+
+function isTryOnNano(payment) {
+  return String(payment.kind || "").startsWith("tryon_") || payment.kind === "visualization_api";
+}
+
+function mergeTryOnPayload(payload) {
+  if (payload.state) {
+    state = payload.state;
+    return;
+  }
+  const patch = payload.statePatch || {};
+  if (patch.tryOn) state.tryOn = patch.tryOn;
+  if (patch.wallet?.nanopaymentSpent !== undefined) {
+    state.wallet.nanopaymentSpent = patch.wallet.nanopaymentSpent;
+  }
+  const incoming = patch.nanopayments || payload.nanoTransactions || [];
+  const existing = new Set(state.nanopayments.map((payment) => payment.id));
+  for (const payment of incoming) {
+    if (!existing.has(payment.id)) {
+      state.nanopayments.push(payment);
+      existing.add(payment.id);
+    }
+  }
 }
 
 function isMissionRequest(message) {
@@ -264,6 +290,20 @@ function collectArcTransactions() {
     });
   }
 
+  for (const payment of state.nanopayments.filter((item) => item.txHash)) {
+    pushTx({
+      id: `${payment.id}-arc`,
+      label: `${payment.action || payment.provider || "Nano action"} nano transaction`,
+      amount: Number(payment.amount || 0),
+      hash: payment.txHash,
+      blockNumber: payment.blockNumber,
+      status: payment.status || "confirmed",
+      source: payment.source || payment.rail || "Circle Nanopayments",
+      counterparty: payment.provider || payment.paidTo || "provider",
+      sortKey: payment.blockNumber ? undefined : Date.now()
+    });
+  }
+
   for (const tx of state.proofs?.frequency?.transactions || []) {
     pushTx({
       id: tx.actionId,
@@ -305,8 +345,10 @@ function collectSimulatedTransactions() {
 
 function nanoStats() {
   const simulatedTotal = state.nanopayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const sellerApi = state.nanopayments.filter((payment) => payment.kind !== "scorer_api");
-  const scorerApi = state.nanopayments.filter((payment) => payment.kind === "scorer_api");
+  const tryOnApi = state.nanopayments.filter(isTryOnNano);
+  const sellerApi = state.nanopayments.filter((payment) => payment.kind !== "scorer_api" && !isTryOnNano(payment));
+  const scorerApi = state.nanopayments.filter((payment) => payment.kind === "scorer_api" || payment.kind === "tryon_scorer");
+  const tryOnTotal = tryOnApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const scorerTotal = scorerApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const sellerTotal = sellerApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const realAmount = Number(state.proofs?.nanopayment?.payment?.formattedAmount || 0);
@@ -325,6 +367,8 @@ function nanoStats() {
     sellerTotal,
     scorerApiCount: scorerApi.length,
     scorerTotal,
+    tryOnCount: tryOnApi.length,
+    tryOnTotal,
     scorerPriceMultiple,
     realAmount,
     total,
@@ -826,6 +870,44 @@ function renderFulfillment() {
   `;
 }
 
+function renderTryOnNanoLedger() {
+  const rows = state.tryOn?.nanoTransactions || state.nanopayments.filter(isTryOnNano);
+  if (!rows.length) {
+    return `
+      <div class="tryon-ledger empty-tryon">
+        <div>
+          <b>Virtual try-on nano transactions</b>
+          <small>Click Stores > Costume Store > photo icon > Put on to create four highlighted Arc nano txs.</small>
+        </div>
+      </div>
+    `;
+  }
+
+  const total = rows.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  return `
+    <div class="tryon-ledger">
+      <div class="tryon-ledger-head">
+        <div>
+          <b>Virtual try-on nano transactions</b>
+          <small>${rows.length} txs · ${total.toFixed(6)} USDC · each action is below $0.01</small>
+        </div>
+        ${state.tryOn?.selectedOfferName ? `<span>${state.tryOn.selectedOfferName}</span>` : ""}
+      </div>
+      ${rows.map((payment) => {
+        const href = payment.txUrl || (payment.txHash ? arcTxUrl(payment.txHash) : nanoReceiptUrl(payment.id));
+        return `
+          <a class="ledger-row tryon-nano" href="${href}" target="_blank" rel="noreferrer">
+            <span>${payment.action || payment.provider}</span>
+            <b>${Number(payment.amount || 0).toFixed(6)} USDC</b>
+            <small>${payment.provider} · ${payment.endpoint} · ${payment.status || "pending"}</small>
+            <small>${payment.txHash ? shortAddress(payment.txHash) : "no Arc hash yet"} · ${payment.source || payment.rail || "Circle Nanopayments"}</small>
+          </a>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function renderTransactionLedger() {
   const arcTransactions = collectArcTransactions();
   const simulatedTransactions = collectSimulatedTransactions();
@@ -852,6 +934,7 @@ function renderTransactionLedger() {
       </div>
       <div class="ledger-col">
         <h3>Nano transactions</h3>
+        ${renderTryOnNanoLedger()}
         ${state.proofs?.nanopayment?.payment?.transaction ? `
           <a class="ledger-row real-nano" href="${state.proofs.nanopayment.payment.transferProofUrl}" target="_blank" rel="noreferrer">
             <span>Real Circle x402 transfer</span>
@@ -860,10 +943,11 @@ function renderTransactionLedger() {
           </a>
         ` : ""}
         ${state.nanopayments.length ? state.nanopayments.map((payment) => `
-          <a class="ledger-row" href="${nanoReceiptUrl(payment.id)}" target="_blank" rel="noreferrer">
-            <span>${payment.id} ${payment.protocol}/${payment.scheme}</span>
+          <a class="ledger-row ${isTryOnNano(payment) ? "tryon-nano compact-tryon" : ""}" href="${payment.txUrl || (payment.txHash ? arcTxUrl(payment.txHash) : nanoReceiptUrl(payment.id))}" target="_blank" rel="noreferrer">
+            <span>${payment.action || payment.id} ${payment.protocol}/${payment.scheme}</span>
             <b>${payment.amount.toFixed(6)} USDC</b>
             <small>${payment.request}</small>
+            ${payment.txHash ? `<small>${shortAddress(payment.txHash)} · ${payment.status || "confirmed"}</small>` : ""}
           </a>
         `).join("") : `<p class="empty log-empty">Run the mission to create x402 receipt links.</p>`}
       </div>
@@ -886,6 +970,7 @@ function renderNanoAnalytics() {
         <div><span>Paid data actions</span><b>${stats.count}</b><small>${stats.simulatedCount} simulated receipts + ${stats.realAmount ? 1 : 0} real x402</small></div>
         <div><span>Seller API nano</span><b>${stats.sellerTotal.toFixed(6)} USDC</b><small>${stats.sellerApiCount} catalog/quote/discovery calls</small></div>
         <div><span>Scorer nano</span><b>${stats.scorerTotal.toFixed(6)} USDC</b><small>${stats.scorerApiCount} TrustRails calls; ${stats.scorerPriceMultiple ? `${Math.floor(stats.scorerPriceMultiple).toLocaleString()}x` : "n/a"} under cheapest purchase</small></div>
+        <div><span>Try-on flow</span><b>${stats.tryOnCount || 0} nano txs</b><small>${(stats.tryOnTotal || 0).toFixed(6)} USDC; all under $0.01 and far smaller than costume prices</small></div>
         <div><span>Total data spend</span><b>${stats.total.toFixed(6)} USDC</b><small>avg ${stats.average.toFixed(6)} USDC/action</small></div>
         <div><span>Real x402 amount</span><b>${stats.realAmount.toFixed(6)} USDC</b><small>${stats.realTransfer || "run full demo"}</small></div>
         <div><span>Card fee breakage</span><b>${stats.cardFeeMultiple ? `${Math.round(stats.cardFeeMultiple)}x` : "n/a"}</b><small>0.30 USD fixed fee vs avg action price</small></div>
@@ -1121,9 +1206,65 @@ function commerceBadgeForOffer(offer) {
   return { label: "Buy now", className: "good" };
 }
 
+function renderCostumeTryOnPanel(costumeOffers) {
+  const latest = state.tryOn?.latest;
+  const hasPhoto = Boolean(state.tryOn?.personImageUrl);
+  const selected = latest?.offerName || state.tryOn?.selectedOfferName || "No costume selected";
+  return `
+    <section class="tryon-panel" data-ai-description="Virtual try-on workflow. The buyer agent pays seller catalog, availability, scorer, and visualization APIs as four sub-cent nano transactions before generating the try-on image.">
+      <div class="tryon-copy">
+        <p class="eyebrow">Nano Banana try-on</p>
+        <h3>Upload once, try costumes with paid API actions</h3>
+        <p>Each Put on click creates four highlighted nano transactions: catalog search, availability, TrustRails scorer, and costume visualization.</p>
+        <button class="secondary tryon-photo-button" type="button" data-action="load-tryon-photo" aria-label="Load Kirill standing photo">
+          <span class="photo-icon" aria-hidden="true"></span>
+          <span>${hasPhoto ? "Kirill photo loaded" : "Load Kirill photo"}</span>
+        </button>
+        ${tryOnStatus ? `<small class="tryon-status">${escapeHtml(tryOnStatus)}</small>` : ""}
+      </div>
+      <div class="tryon-stage">
+        <figure>
+          ${hasPhoto
+            ? `<img src="${state.tryOn.personImageUrl}" alt="Kirill standing reference photo for virtual try-on">`
+            : `<div class="tryon-placeholder">Reference photo</div>`}
+          <figcaption>Reference photo</figcaption>
+        </figure>
+        <figure>
+          ${latest?.image?.url
+            ? `<img src="${latest.image.url}" alt="${selected} virtual try-on generated image">`
+            : `<div class="tryon-placeholder">Generated try-on</div>`}
+          <figcaption>${selected}</figcaption>
+        </figure>
+      </div>
+      <div class="tryon-meta">
+        <span><b>Model</b>${latest?.image?.model || "gemini-3.1-flash-image-preview"}</span>
+        <span><b>Prompt</b>${latest?.promptSummary || "Retail virtual try-on preserving pose, face, lighting, and background."}</span>
+        <span><b>Nano price</b>4 × 0.000001 USDC</span>
+      </div>
+      ${latest?.nanoTransactions?.length ? `
+        <div class="tryon-nano-list">
+          ${latest.nanoTransactions.map((payment) => `
+            <a href="${payment.txUrl || nanoReceiptUrl(payment.id)}" target="_blank" rel="noreferrer">
+              <span>${payment.action}</span>
+              <b>${Number(payment.amount || 0).toFixed(6)} USDC</b>
+              <small>${payment.txHash ? shortAddress(payment.txHash) : payment.status}</small>
+            </a>
+          `).join("")}
+        </div>
+      ` : `
+        <div class="tryon-suggestions">
+          ${costumeOffers.map((offer) => `<span>${offer.name}</span>`).join("")}
+        </div>
+      `}
+    </section>
+  `;
+}
+
 function renderCommerceStore(store, merchant, offers) {
   const heroOffer = offers[0];
   const cartTotal = offers.reduce((sum, offer) => sum + offer.price, 0);
+  const isCostumeStore = store.id === "costumes";
+  const costumeOffers = offers.filter((offer) => offer.category === "costumes");
 
   return `
     <div class="commerce-store" data-ai-description="ShopRails merchant storefront for ${merchant.name}. Product cards expose machine-readable offer IDs, delivery windows, prices, and risk signals.">
@@ -1132,6 +1273,7 @@ function renderCommerceStore(store, merchant, offers) {
         <b>${store.id === "sushi" ? "Friday office delivery" : "Party-ready pirate supplies"}</b>
         <small>${merchant.rating.toFixed(1)} stars · ${merchant.trustTier} seller · ${merchant.domain}</small>
       </div>
+      ${isCostumeStore ? renderCostumeTryOnPanel(costumeOffers) : ""}
       <div class="commerce-layout">
         <aside class="agent-order-panel">
           <div>
@@ -1189,7 +1331,19 @@ function renderCommerceStore(store, merchant, offers) {
                       <span>Risk ${offer.riskScore}</span>
                       <span>${offer.brand}</span>
                     </div>
-                    <button class="ghost-light" type="button">View offer</button>
+                    <div class="product-actions">
+                      <button class="ghost-light" type="button">View offer</button>
+                      ${isCostumeStore && offer.category === "costumes" ? `
+                        <button
+                          class="secondary put-on-button"
+                          type="button"
+                          data-action="put-on-costume"
+                          data-offer-id="${offer.id}"
+                          ${state.tryOn?.personImageUrl ? "" : "disabled"}
+                          aria-label="Generate virtual try-on for ${offer.name}"
+                        >Put on</button>
+                      ` : ""}
+                    </div>
                   </div>
                 </article>
               `;
@@ -1373,6 +1527,7 @@ function bindEvents() {
       chatDraft = "show me the Arc transactions";
       aiTestStatus = null;
       imageStatus = "";
+      tryOnStatus = "";
       liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc transaction proof, and reviewed cart approval.";
       renderShell();
       try {
@@ -1416,6 +1571,7 @@ function bindEvents() {
     chatDraft = state.mission.prompt;
     liveStatus = "";
     imageStatus = "";
+    tryOnStatus = "";
     aiTestStatus = null;
     renderShell();
   });
@@ -1441,6 +1597,48 @@ function bindEvents() {
     button.addEventListener("click", () => {
       activeStore = button.dataset.store;
       activeInstruction = null;
+      renderShell();
+    });
+  });
+
+  app.querySelector("[data-action='load-tryon-photo']")?.addEventListener("click", () => {
+    state.tryOn = {
+      ...(state.tryOn || {}),
+      personImageUrl: TRY_ON_PERSON_IMAGE,
+      latest: state.tryOn?.latest || null,
+      nanoTransactions: state.tryOn?.nanoTransactions || [],
+      runs: state.tryOn?.runs || 0
+    };
+    activeWorkspaceTab = "stores";
+    activeStore = "costumes";
+    tryOnStatus = "Seeded Kirill standing photo loaded. Choose a costume and click Put on.";
+    renderShell();
+  });
+
+  app.querySelectorAll("[data-action='put-on-costume']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const offerId = button.dataset.offerId;
+      const personImageUrl = state.tryOn?.personImageUrl || TRY_ON_PERSON_IMAGE;
+      activeWorkspaceTab = "stores";
+      activeStore = "costumes";
+      tryOnStatus = "Generating Nano Banana try-on and creating four Arc nano transactions...";
+      renderShell();
+      try {
+        const response = await fetch("/api/costumes/try-on", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ offerId, personImageUrl, imageMode })
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error) {
+          throw new Error(payload.error || "Costume try-on failed");
+        }
+        mergeTryOnPayload(payload);
+        const liveCount = (payload.nanoTransactions || []).filter((tx) => tx.txUrl).length;
+        tryOnStatus = `Try-on ready for ${state.tryOn?.selectedOfferName || offerId}. ${liveCount} ArcScan nano tx link(s) available in Wallet.`;
+      } catch (error) {
+        tryOnStatus = `Try-on failed: ${error.message}`;
+      }
       renderShell();
     });
   });

@@ -360,6 +360,34 @@ export const offers = [
     image: "/artifacts/generated-images/crew-costume-pack-gemini-3-1-flash-image-preview.png"
   },
   {
+    id: "red-sash-pirate-kit",
+    merchantId: "sevenseas-costumes",
+    name: "Red sash pirate accessory kit",
+    category: "costumes",
+    brand: "Seven Seas Basics",
+    price: 48,
+    unit: "kit",
+    quantityLabel: "adjustable sash, hat, vest accents",
+    deliveryWindow: "Friday before 5 PM",
+    reason: "A lower-cost adjustable pirate look with a red sash and simple accessories that should fit most guests.",
+    riskScore: 42,
+    image: productImage("costume", "Red sash kit", ["#fee2e2", "#fbbf24", "#111827"])
+  },
+  {
+    id: "captain-coat-kit",
+    merchantId: "sevenseas-costumes",
+    name: "Captain coat pirate kit",
+    category: "costumes",
+    brand: "Seven Seas Premium",
+    price: 72,
+    unit: "kit",
+    quantityLabel: "coat-style costume, hat, sash",
+    deliveryWindow: "Friday before 5 PM",
+    reason: "A more polished captain-style outfit for the buyer preview; higher price routes it through review.",
+    riskScore: 52,
+    image: productImage("costume", "Captain coat kit", ["#dbeafe", "#f87171", "#111827"])
+  },
+  {
     id: "assistant-maya",
     merchantId: "taskdock",
     name: "Setup assistant Maya R.",

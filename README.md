@@ -14,6 +14,8 @@ Distributed demo workers:
 
 ShopRails lets AI agents pay seller and scorer APIs with sub-cent USDC nanopayments, then make direct Arc USDC purchases after buyer policy approval.
 
+New demo proof: the Costume Store includes a Nano Banana virtual try-on. Click the photo button, click `Put on`, and the hosted Worker generates the try-on image while creating four fresh Circle Wallets Arc nano transactions at `0.000001 USDC` each.
+
 ## Screenshots
 
 ![ShopRails agent activity and proof panel](docs/screenshots/shoprails-agent-proof-log.png)
@@ -40,11 +42,12 @@ ShopRails turns that request into atomic commerce actions:
 2. Seller API calls are paid through Circle x402/Gateway nanopayments.
 3. TrustRails, an independent scorer worker, is paid per item risk check.
 4. Merchant pages remain human-visible, but every field also includes agent-readable metadata and AI help buttons.
-5. Trusted, low-risk items become Buy It Now.
-6. Costume and human-assistant purchases wait for buyer review.
-7. A blacklisted merchant offer is declined before any transaction is signed.
-8. The buyer reviews the cart, chats "confirm all reviewed items", and direct Arc USDC payments go to seller wallets.
-9. The proof panel links the real Circle Wallets transaction, x402 transfer, Arc transaction proof, and a 50-transaction Arc frequency burst.
+5. In the Costume Store, the buyer loads `kirill_standing.jpg` and clicks `Put on`; this creates paid catalog, availability, scorer, and visualization nano actions.
+6. Trusted, low-risk items become Buy It Now.
+7. Costume and human-assistant purchases wait for buyer review.
+8. A blacklisted merchant offer is declined before any transaction is signed.
+9. The buyer reviews the cart, chats "confirm all reviewed items", and direct Arc USDC payments go to seller wallets.
+10. The proof panel links the real Circle Wallets transaction, x402 transfer, Arc transaction proof, virtual try-on nano txs, and a 50-transaction Arc frequency burst.
 
 ## Impact
 
@@ -74,6 +77,8 @@ flowchart TD
   Agent --> SellerW
   SellerW --> SellerAPIs["Catalog search, availability, quotes, purchase intents"]
   SellerAPIs --> Cart["Proposed cart"]
+  SellerW --> TryOn["Costume try-on API<br/>Nano Banana image"]
+  TryOn --> NanoLog
 
   Agent --> ScorerW
   ScorerW --> Score["Trust score, fraud reasons, buy / review / decline hint"]
@@ -94,6 +99,8 @@ flowchart TD
   Review --> Approval["Buyer approval"]
   BuyNow --> ArcPay["Direct Arc USDC payment"]
   Approval --> ArcPay
+  UI --> FreshSigner["Cloudflare Worker Circle Wallets REST signer<br/>fresh entitySecretCiphertext"]
+  FreshSigner --> ArcPay
   ArcPay --> SellerWallets["Seller wallets"]
   ArcPay --> ArcProof["ArcScan transaction links"]
   Block --> Audit["Audit log, no payment"]
@@ -175,6 +182,17 @@ MCP-style tool surface:
 
 Margin explanation: each action is priced below one cent. With card rails, a fixed `0.30 USD` fee plus percentage fees destroys the margin on every `0.000001 USDC` or `0.00042 USDC` action. Arc and Circle let the app settle per action in USDC without batching everything into a subscription or hiding costs behind a platform balance.
 
+### Virtual Try-On Nano Transactions
+
+Hosted Cloudflare proof from the Costume Store `Put on` flow:
+
+- Seller catalog search: [`0x5c06...363d`](https://testnet.arcscan.app/tx/0x5c06cd293f531de5c90557b9760e4c276af703a377a195f8a9aeb528da36363d)
+- Seller availability check: [`0x542a...3803`](https://testnet.arcscan.app/tx/0x542a9d1be6e716d7d70c062b8fdd24349930f80defb4bfd7f2c220ae8f333803)
+- TrustRails scorer check: [`0x573d...1e7b`](https://testnet.arcscan.app/tx/0x573d08c4deca27b35657f7b415eb2a7a6190c31f724e558ac4904e68eab01e7b)
+- Nano Banana visualization: [`0x45ff...64eb`](https://testnet.arcscan.app/tx/0x45ff2f8b2a6b25dfe40e6af22fdf2f930f44c7f58e17fc8cc74c27d7cb4164eb)
+- Amount: `0.000001 USDC` per action, `0.000004 USDC` total.
+- Signer path: Cloudflare Worker using Circle Wallets REST, WebCrypto RSA-OAEP entity-secret ciphertext, and Arc Testnet settlement.
+
 ## Install And Run
 
 ```powershell
@@ -195,7 +213,9 @@ The safest hackathon path is click-only:
 1. Click `Run full demo` or `Run perfect hackathon demo`.
 2. Point to the Judge proof panel.
 3. Open the Circle Wallets ArcScan tx, x402 transfer proof, escrow contract, and 50+ Arc tx proof if asked.
-4. Use the prefilled cart chat, `confirm all reviewed items`, to show review release.
+4. Open `Stores > Costume Store`, click `Load Kirill photo`, then click `Put on`.
+5. Open `Wallet` and point to the highlighted Virtual try-on nano transactions.
+6. Use the prefilled cart chat, `confirm all reviewed items`, to show review release.
 
 Useful commands:
 
@@ -216,6 +236,7 @@ CIRCLE_ENTITY_SECRET=
 CIRCLE_WALLET_SET_ID=
 CIRCLE_WALLET_ID=
 CIRCLE_WALLET_ADDRESS=
+CIRCLE_WALLET_BLOCKCHAIN=ARC-TESTNET
 ```
 
 ## LLM And Images
@@ -223,6 +244,7 @@ CIRCLE_WALLET_ADDRESS=
 - The demo UI uses live Gemini text calls by default; it does not expose mock LLM mode.
 - Real text calls use `gemini-3.1-flash-lite-preview`, with `gemini-3-flash-preview` as a real fallback model.
 - Product images use the configured Gemini image provider, `gemini-3.1-flash-image-preview` for the Nano Banana 2-style image path.
+- Virtual try-on uses `kirill_standing.jpg` plus `gemini-3.1-flash-image-preview`, cached locally under `artifacts/generated-images` and on Cloudflare in the `TRYON_CACHE` KV namespace.
 - `Test AI providers` verifies real Gemini text, fallback behavior, and image generation from inside the app.
 - Generated product assets live in `artifacts/generated-images`.
 
@@ -272,7 +294,7 @@ Public GitHub repository:
 
 Demo application platform:
 
-Cloudflare Workers with static assets and a lightweight Worker API replaying cached real Arc/Circle proof artifacts.
+Cloudflare Workers with static assets, three service Workers for buyer/seller/scorer architecture, and a main Worker API that uses Circle Wallets REST for fresh Arc nano transactions with cached proof fallback.
 
 Application URL:
 

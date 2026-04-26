@@ -1,7 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { shoprailsEnv } from "./env.js";
+import { TRY_ON_IMAGE_MODEL, TRY_ON_PERSON_IMAGE, buildTryOnPrompt, tryOnFileName } from "./try-on.js";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GENERATED_DIR = join(process.cwd(), "artifacts", "generated-images");
@@ -346,5 +347,79 @@ export async function generateProductImageAsset(offer, mode = "mock") {
     model: env.imageModel,
     url: `/artifacts/generated-images/${fileName}`,
     prompt
+  };
+}
+
+function localPathForPersonImage(personImageUrl) {
+  if (!personImageUrl || personImageUrl === TRY_ON_PERSON_IMAGE) {
+    return join(process.cwd(), "kirill_standing.jpg");
+  }
+  return join(process.cwd(), personImageUrl.replace(/^\/+/, ""));
+}
+
+export async function generateCostumeTryOnAsset(offer, { personImageUrl = TRY_ON_PERSON_IMAGE, mode = "gemini" } = {}) {
+  const env = shoprailsEnv();
+  const provider = mode === "gemini" || mode === "real" ? "gemini" : mode;
+  if (provider !== "gemini") {
+    throw new Error("Virtual try-on requires Gemini image mode; mock try-on images are disabled for this demo.");
+  }
+
+  await mkdir(GENERATED_DIR, { recursive: true });
+  const model = env.imageModel || TRY_ON_IMAGE_MODEL;
+  const fileName = tryOnFileName(offer.id, model);
+  const path = join(GENERATED_DIR, fileName);
+  const prompt = buildTryOnPrompt(offer);
+
+  if (existsSync(path)) {
+    return {
+      offerId: offer.id,
+      provider,
+      model,
+      url: `/artifacts/generated-images/${fileName}`,
+      prompt,
+      promptSummary: "Fashion e-commerce virtual try-on preserving the buyer reference photo and applying the selected pirate costume.",
+      cached: true
+    };
+  }
+
+  const imageBytes = await readFile(localPathForPersonImage(personImageUrl));
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: imageBytes.toString("base64")
+            }
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseModalities: ["IMAGE"],
+      imageConfig: {
+        aspectRatio: "3:4",
+        imageSize: "1K"
+      }
+    }
+  };
+
+  const payload = await callGemini(model, body, env.geminiApiKey);
+  const image = imageFromGeminiResponse(payload);
+  if (!image) {
+    throw new Error(`Gemini image model ${model} returned no virtual try-on image.`);
+  }
+
+  await writeFile(path, Buffer.from(image.data, "base64"));
+  return {
+    offerId: offer.id,
+    provider,
+    model,
+    url: `/artifacts/generated-images/${fileName}`,
+    prompt,
+    promptSummary: "Fashion e-commerce virtual try-on preserving the buyer reference photo and applying the selected pirate costume.",
+    cached: false
   };
 }

@@ -1,6 +1,7 @@
 import { ARC_CONFIG, atomicQueries, buyerProfile, buyerServer, demoIntents, defaultPolicy, demoWallets, merchants, offers, scorerServer, sellerServers, verifiedDemoTransactions, verifiedFunding } from "./data.js";
 import { DecisionStage, createPolicyState, evaluatePurchase, getMerchant, getOffer } from "./policy.js";
 import { scorePurchase } from "./scorer.js";
+import { TRY_ON_PERSON_IMAGE } from "./try-on.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -220,6 +221,12 @@ export function createInitialState() {
         reason: "Set CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET to switch one payment to Circle Wallets API signing."
       }
     },
+    tryOn: {
+      personImageUrl: "",
+      latest: null,
+      nanoTransactions: [],
+      runs: 0
+    },
     toolLog: [],
     llmLog: [],
     chat: [
@@ -235,6 +242,64 @@ export function createInitialState() {
       steps: []
     }
   };
+}
+
+export function applyCostumeTryOnResult(state, { offerId, personImageUrl = TRY_ON_PERSON_IMAGE, image = null, nanoTransactions = [] }) {
+  const offer = getOffer(offerId, state.catalog);
+  const runNumber = Number(state.tryOn?.runs || 0) + 1;
+  const payments = nanoTransactions.map((tx, index) => {
+    const amount = Number(tx.amountUsdc ?? tx.amount ?? 0);
+    return {
+      id: `tryon-${runNumber}-${index + 1}`,
+      actionId: tx.id,
+      protocol: tx.protocol || "x402",
+      rail: tx.rail || "Circle Nanopayments",
+      scheme: tx.scheme || "GatewayWalletBatched",
+      chain: tx.chain || ARC_CONFIG.gatewaySupportedChainName,
+      currency: "USDC",
+      amount,
+      kind: tx.kind,
+      action: tx.action,
+      provider: tx.provider,
+      endpoint: tx.endpoint,
+      paidTo: tx.paidTo,
+      request: tx.request,
+      status: tx.status || "confirmed",
+      txHash: tx.txHash || tx.hash || "",
+      txUrl: tx.txUrl || (tx.txHash ? arcTxUrl(tx.txHash) : ""),
+      live: Boolean(tx.live),
+      source: tx.source || (tx.live ? "live_arc" : "demo")
+    };
+  });
+
+  state.nanopayments.push(...payments);
+  const tryOnSpend = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  state.wallet.nanopaymentSpent = Number((state.wallet.nanopaymentSpent + tryOnSpend).toFixed(6));
+  state.tryOn = {
+    personImageUrl,
+    selectedOfferId: offer.id,
+    selectedOfferName: offer.name,
+    latest: {
+      offerId: offer.id,
+      offerName: offer.name,
+      image,
+      promptSummary: image?.promptSummary || "Fashion e-commerce virtual try-on preserving the buyer photo and applying the selected pirate costume.",
+      nanoTransactions: payments
+    },
+    nanoTransactions: payments,
+    runs: runNumber
+  };
+
+  logTool(state, "visualize-costume.try_on", {
+    offerId: offer.id,
+    personImageUrl
+  }, {
+    image: image?.url || "",
+    nanoTransactions: payments.length,
+    spend: Number(tryOnSpend.toFixed(6))
+  });
+
+  return state.tryOn;
 }
 
 export function walletGetBalance(state) {

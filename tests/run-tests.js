@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { merchants, scorerServer } from "../src/data.js";
 import { DecisionStage, evaluatePurchase } from "../src/policy.js";
 import { createLlmProvider } from "../src/llm-providers.js";
 import { createInitialState, reviewChat, runDemoMission, runDemoMissionWithLlm } from "../src/shoprails-tools.js";
+import { TRY_ON_NANO_AMOUNT, buildTryOnNanoActions, dryRunTryOnNanoActions, getCostumeTryOnOffer } from "../src/try-on.js";
 
 const tests = [];
 
@@ -104,6 +106,31 @@ test("async demo mission supports the mock LLM provider", async () => {
   assert.equal(result.autoBought, 3);
   assert.equal(state.llmLog.length, 4);
   assert.ok(state.llmLog.every((entry) => entry.model === "mock-shoprails-llm"));
+});
+
+test("try-on action builder returns four one-micro-USDC nano actions", () => {
+  const actions = buildTryOnNanoActions("crew-costume-pack");
+
+  assert.equal(actions.length, 4);
+  assert.ok(actions.every((action) => action.amount === TRY_ON_NANO_AMOUNT));
+  assert.ok(actions.every((action) => action.amountUsdc === "0.000001"));
+  assert.ok(actions.every((action) => action.currency === "USDC"));
+  assert.equal(actions.find((action) => action.kind === "tryon_catalog_search").paidTo, merchants["sevenseas-costumes"].wallet);
+  assert.equal(actions.find((action) => action.kind === "tryon_availability").paidTo, merchants["sevenseas-costumes"].wallet);
+  assert.equal(actions.find((action) => action.kind === "tryon_scorer").paidTo, scorerServer.wallet);
+  assert.equal(actions.find((action) => action.kind === "visualization_api").provider, "Seven Seas Visualizer");
+});
+
+test("try-on rejects non-costume offers", () => {
+  assert.throws(() => getCostumeTryOnOffer("sushi-party-set"), /only available for costume offers/);
+});
+
+test("try-on dry-run returns action metadata without live tx hashes", () => {
+  const actions = dryRunTryOnNanoActions("red-sash-pirate-kit");
+
+  assert.equal(actions.length, 4);
+  assert.ok(actions.every((action) => action.status === "dry_run"));
+  assert.ok(actions.every((action) => action.txHash === ""));
 });
 
 let failed = 0;

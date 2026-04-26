@@ -27,11 +27,12 @@ await mkdir(dist, { recursive: true });
 
 await copyFile("index.html", join(dist, "index.html"));
 
-for (const file of ["app.js", "styles.css", "data.js", "policy.js", "scorer.js", "shoprails-tools.js"]) {
+for (const file of ["app.js", "styles.css", "data.js", "policy.js", "scorer.js", "shoprails-tools.js", "try-on.js"]) {
   await copyFile(join("src", file), join(dist, "src", file));
 }
 
 await copyDir(join("artifacts", "generated-images"), join(dist, "artifacts", "generated-images"));
+await copyFile("kirill_standing.jpg", join(dist, "artifacts", "kirill_standing.jpg"));
 
 const artifactRootFiles = await readdir("artifacts", { withFileTypes: true });
 const allowedJson = new Set([

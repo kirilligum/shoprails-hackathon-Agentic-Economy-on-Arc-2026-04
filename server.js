@@ -3,11 +3,12 @@ import { extname, join, normalize } from "node:path";
 import { readFile } from "node:fs/promises";
 import { deployEscrowContract, readEscrowArtifact, runEscrowDemo } from "./src/arc-escrow.js";
 import { readFrequencyProof, runFrequencyProof } from "./src/arc-frequency.js";
-import { getArcBalance, scaledArcAmount, sendScaledUsdcTransactions } from "./src/arc-live.js";
+import { getArcBalance, scaledArcAmount, sendArcNanoTransactions, sendScaledUsdcTransactions } from "./src/arc-live.js";
 import { getCircleWalletsStatus } from "./src/circle-wallets.js";
-import { createLlmProvider, generateProductImageAsset, getLlmRuntimeConfig, runAiProviderSelfTest } from "./src/llm-providers.js";
+import { createLlmProvider, generateCostumeTryOnAsset, generateProductImageAsset, getLlmRuntimeConfig, runAiProviderSelfTest } from "./src/llm-providers.js";
 import { ensureGatewayDeposit, getGatewayBalances, handleX402PremiumCatalog, readNanopaymentProof, runNanopaymentProof } from "./src/x402-live.js";
 import {
+  applyCostumeTryOnResult,
   catalogSearch,
   checkoutEvaluate,
   checkoutSubmit,
@@ -22,6 +23,7 @@ import {
   scorerEvaluate,
   walletGetBalance
 } from "./src/shoprails-tools.js";
+import { TRY_ON_PERSON_IMAGE, buildTryOnNanoActions, dryRunTryOnNanoActions, getCostumeTryOnOffer } from "./src/try-on.js";
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = process.cwd();
@@ -56,7 +58,7 @@ async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requested = url.pathname === "/" ? "/index.html" : url.pathname;
   const safePath = normalize(requested).replace(/^(\.\.[/\\])+/, "");
-  const filePath = join(ROOT, safePath);
+  const filePath = requested === TRY_ON_PERSON_IMAGE ? join(ROOT, "kirill_standing.jpg") : join(ROOT, safePath);
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
 
   try {
@@ -138,6 +140,54 @@ async function routeApi(req, res) {
     }
 
     return sendJson(res, errors.length ? 207 : 200, { assets, errors, state });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/costumes/try-on") {
+    const offerId = body.offerId || "crew-costume-pack";
+    const personImageUrl = body.personImageUrl || TRY_ON_PERSON_IMAGE;
+    const imageMode = body.imageMode || body.mode || "gemini";
+    const { offer } = getCostumeTryOnOffer(offerId, state.catalog);
+
+    if (body.dryRun) {
+      const image = {
+        offerId,
+        provider: "dry_run",
+        model: "dry_run",
+        url: offer.image,
+        promptSummary: "Dry run only; no Gemini image or Arc transfer was created.",
+        cached: false,
+        dryRun: true
+      };
+      return sendJson(res, 200, {
+        offerId,
+        image,
+        nanoTransactions: dryRunTryOnNanoActions(offerId, state.catalog),
+        dryRun: true
+      });
+    }
+
+    const image = await generateCostumeTryOnAsset(offer, { personImageUrl, mode: imageMode });
+    const nanoTransactions = await sendArcNanoTransactions(buildTryOnNanoActions(offerId, state.catalog));
+    const tryOn = applyCostumeTryOnResult(state, {
+      offerId,
+      personImageUrl,
+      image,
+      nanoTransactions
+    });
+
+    return sendJson(res, 200, {
+      offerId,
+      image,
+      nanoTransactions: tryOn.nanoTransactions,
+      statePatch: {
+        tryOn,
+        nanopayments: tryOn.nanoTransactions,
+        wallet: {
+          nanopaymentSpent: state.wallet.nanopaymentSpent
+        }
+      },
+      state
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/api/mcp/wallet.get_balance") {

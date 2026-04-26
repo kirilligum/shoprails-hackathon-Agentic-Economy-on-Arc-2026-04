@@ -65,3 +65,30 @@ export async function sendScaledUsdcTransactions(items) {
 
   return results;
 }
+
+export async function sendArcNanoTransactions(actions) {
+  const signer = await getArcSigner();
+  const results = [];
+
+  for (const action of actions) {
+    const amountUsdc = Number(action.amountUsdc ?? action.amount ?? 0).toFixed(6);
+    const tx = await signer.sendTransaction({
+      to: action.paidTo,
+      value: parseUnits(amountUsdc, 18)
+    });
+    const receipt = await tx.wait(1);
+
+    results.push({
+      ...action,
+      amountUsdc,
+      txHash: tx.hash,
+      txUrl: `${ARC_CONFIG.explorerUrl}/tx/${tx.hash}`,
+      blockNumber: receipt.blockNumber,
+      status: receipt.status === 1 ? "confirmed" : "failed",
+      live: true,
+      source: "local_arc_signer"
+    });
+  }
+
+  return results;
+}

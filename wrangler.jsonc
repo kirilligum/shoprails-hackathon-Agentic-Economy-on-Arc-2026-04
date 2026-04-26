@@ -9,6 +9,12 @@
     "run_worker_first": true,
     "not_found_handling": "single-page-application"
   },
+  "kv_namespaces": [
+    {
+      "binding": "TRYON_CACHE",
+      "id": "fa27613efdb54ca6999e5bc29a07643a"
+    }
+  ],
   "vars": {
     "TEST_LOGIN_SHA256": "5e949f239c08ab943bb1d095a43188bde14f70fdc4c1e3369545aedfd662bd99",
     "TEST_PASSWORD_SHA256": "fb1310d4643c77a1e8d0e5f65bc23fdeda082ba42860c26866c42040bb8350d7"

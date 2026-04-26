@@ -1,10 +1,12 @@
-import { atomicQueries, offers } from "../src/data.js";
-import { createInitialState, getNanopaymentReceipt, reviewChat, runDemoMission, runDemoMissionWithLlm } from "../src/shoprails-tools.js";
+import { ARC_CONFIG, atomicQueries, offers } from "../src/data.js";
+import { applyCostumeTryOnResult, createInitialState, getNanopaymentReceipt, reviewChat, runDemoMission, runDemoMissionWithLlm } from "../src/shoprails-tools.js";
+import { TRY_ON_IMAGE_MODEL, TRY_ON_PERSON_IMAGE, buildTryOnNanoActions, buildTryOnPrompt, dryRunTryOnNanoActions, getCostumeTryOnOffer, tryOnCacheKey } from "../src/try-on.js";
 
 const TEXT_MODEL = "gemini-3.1-flash-lite-preview";
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 const TEXT_FALLBACK_MODEL = "gemini-3-flash-preview";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const CIRCLE_API_BASE = "https://api.circle.com";
 
 function textFromGeminiResponse(payload) {
   return (payload.candidates || [])
@@ -142,6 +144,290 @@ async function readAssetJson(env, request, path) {
   const response = await env.ASSETS.fetch(new Request(url));
   if (!response.ok) return null;
   return response.json();
+}
+
+function arrayBufferToBase64(buffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function publicKeyToArrayBuffer(publicKey) {
+  const clean = String(publicKey)
+    .replace(/-----BEGIN PUBLIC KEY-----/g, "")
+    .replace(/-----END PUBLIC KEY-----/g, "")
+    .replace(/\s+/g, "");
+  return base64ToArrayBuffer(clean);
+}
+
+function entitySecretToBytes(entitySecret) {
+  const clean = String(entitySecret || "").trim().replace(/^0x/i, "");
+  if (/^[0-9a-fA-F]{64}$/.test(clean)) {
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < clean.length; i += 2) {
+      bytes[i / 2] = Number.parseInt(clean.slice(i, i + 2), 16);
+    }
+    return bytes;
+  }
+  return new TextEncoder().encode(entitySecret);
+}
+
+async function circleFetch(env, path, options = {}) {
+  if (!env.CIRCLE_API_KEY) {
+    throw new Error("CIRCLE_API_KEY is not configured on the Worker.");
+  }
+  const response = await fetch(`${CIRCLE_API_BASE}${path}`, {
+    ...options,
+    headers: {
+      authorization: `Bearer ${env.CIRCLE_API_KEY}`,
+      "content-type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const raw = await response.text();
+  let payload;
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch {
+    payload = { raw };
+  }
+  if (!response.ok) {
+    throw new Error(payload.message || payload.error?.message || payload.error || `Circle request failed with ${response.status}`);
+  }
+  return payload;
+}
+
+async function circleEntityPublicKey(env) {
+  const payload = await circleFetch(env, "/v1/w3s/config/entity/publicKey");
+  const publicKey = payload.data?.publicKey || payload.publicKey;
+  if (!publicKey) throw new Error("Circle did not return an entity public key.");
+  return publicKey;
+}
+
+async function encryptEntitySecret(env) {
+  if (!env.CIRCLE_ENTITY_SECRET) {
+    throw new Error("CIRCLE_ENTITY_SECRET is not configured on the Worker.");
+  }
+  const publicKey = await circleEntityPublicKey(env);
+  const key = await crypto.subtle.importKey(
+    "spki",
+    publicKeyToArrayBuffer(publicKey),
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"]
+  );
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "RSA-OAEP" },
+    key,
+    entitySecretToBytes(env.CIRCLE_ENTITY_SECRET)
+  );
+  return arrayBufferToBase64(encrypted);
+}
+
+function circleTransferPayload(env, action, entitySecretCiphertext, variant = "wallet_id") {
+  const base = {
+    idempotencyKey: crypto.randomUUID(),
+    entitySecretCiphertext,
+    destinationAddress: action.paidTo,
+    amounts: [action.amountUsdc],
+    tokenAddress: env.CIRCLE_TOKEN_ADDRESS || ARC_CONFIG.usdcAddress,
+    feeLevel: env.CIRCLE_FEE_LEVEL || "MEDIUM",
+    refId: action.id
+  };
+
+  if (variant === "wallet_address") {
+    return {
+      ...base,
+      blockchain: env.CIRCLE_WALLET_BLOCKCHAIN || ARC_CONFIG.walletChainCode,
+      walletAddress: env.CIRCLE_WALLET_ADDRESS
+    };
+  }
+
+  return {
+    ...base,
+    walletId: env.CIRCLE_WALLET_ID,
+    blockchain: env.CIRCLE_WALLET_BLOCKCHAIN || ARC_CONFIG.walletChainCode,
+    ...(env.CIRCLE_TOKEN_ID ? { tokenId: env.CIRCLE_TOKEN_ID } : {})
+  };
+}
+
+async function createCircleTransfer(env, action) {
+  if (!env.CIRCLE_WALLET_ID && !env.CIRCLE_WALLET_ADDRESS) {
+    throw new Error("CIRCLE_WALLET_ID or CIRCLE_WALLET_ADDRESS is not configured on the Worker.");
+  }
+  const entitySecretCiphertext = await encryptEntitySecret(env);
+  const variants = ["wallet_id", "wallet_address"];
+  const errors = [];
+  for (const variant of variants) {
+    try {
+      const payload = circleTransferPayload(env, action, entitySecretCiphertext, variant);
+      const response = await circleFetch(env, "/v1/w3s/developer/transactions/transfer", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      const id = response.data?.id || response.data?.transactionId || response.id;
+      if (!id) throw new Error("Circle transfer response did not include a transaction id.");
+      return { id, response, variant };
+    } catch (error) {
+      errors.push(`${variant}: ${error.message}`);
+    }
+  }
+  throw new Error(`Circle transfer could not be created. ${errors.join(" | ")}`);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollCircleTransaction(env, id) {
+  let transaction = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const payload = await circleFetch(env, `/v1/w3s/transactions/${id}`);
+    transaction = payload.data?.transaction || payload.data || payload.transaction || null;
+    if (["COMPLETE", "CONFIRMED", "FAILED", "DENIED", "CANCELLED"].includes(transaction?.state)) {
+      return transaction;
+    }
+    await sleep(1500);
+  }
+  return transaction;
+}
+
+async function runCircleNanoTransfers(env, actions) {
+  return Promise.all(actions.map(async (action) => {
+    const created = await createCircleTransfer(env, action);
+    const transaction = await pollCircleTransaction(env, created.id);
+    const txHash = transaction?.txHash || transaction?.transactionHash || "";
+    return {
+      ...action,
+      status: transaction?.state === "COMPLETE" || transaction?.state === "CONFIRMED" ? "confirmed" : (transaction?.state || "submitted"),
+      transactionId: created.id,
+      txHash,
+      txUrl: txHash ? `${ARC_CONFIG.explorerUrl}/tx/${txHash}` : "",
+      live: Boolean(txHash),
+      source: "circle_wallets_worker",
+      circleVariant: created.variant
+    };
+  }));
+}
+
+async function cachedNanoFallback(env, request, actions, error) {
+  const frequency = await readAssetJson(env, request, "/artifacts/arc-frequency-demo-live.json");
+  const cached = Array.isArray(frequency?.transactions) ? frequency.transactions.slice(0, actions.length) : [];
+  if (cached.length < actions.length) throw error;
+  return actions.map((action, index) => {
+    const proof = cached[index];
+    return {
+      ...action,
+      status: "confirmed_cached_fallback",
+      txHash: proof.txHash,
+      txUrl: proof.txUrl || `${ARC_CONFIG.explorerUrl}/tx/${proof.txHash}`,
+      blockNumber: proof.blockNumber,
+      live: false,
+      source: "cached_arc_fallback",
+      fallbackReason: error.message
+    };
+  });
+}
+
+function imageFromGeminiResponse(payload) {
+  for (const candidate of payload.candidates || []) {
+    for (const part of candidate.content?.parts || []) {
+      const inlineData = part.inlineData || part.inline_data;
+      if (inlineData?.data) {
+        return {
+          data: inlineData.data,
+          mimeType: inlineData.mimeType || inlineData.mime_type || "image/png"
+        };
+      }
+    }
+  }
+  return null;
+}
+
+async function hostedTryOnImage(env, request, offer, personImageUrl) {
+  const model = env.GEMINI_IMAGE_MODEL || IMAGE_MODEL;
+  const cacheKey = tryOnCacheKey(offer.id, model);
+  if (env.TRYON_CACHE) {
+    const cached = await env.TRYON_CACHE.get(cacheKey, "json");
+    if (cached?.url) return { ...cached, cached: true };
+  }
+
+  if (!env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured on the Worker, and no cached try-on image exists.");
+  }
+
+  const assetUrl = new URL(personImageUrl || TRY_ON_PERSON_IMAGE, request.url);
+  const imageResponse = await env.ASSETS.fetch(new Request(assetUrl));
+  if (!imageResponse.ok) throw new Error(`Could not load try-on reference image: ${personImageUrl}`);
+  const referenceImage = arrayBufferToBase64(await imageResponse.arrayBuffer());
+  const prompt = buildTryOnPrompt(offer);
+
+  const response = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-goog-api-key": env.GEMINI_API_KEY
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: referenceImage
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio: "3:4",
+          imageSize: "1K"
+        }
+      }
+    })
+  });
+
+  const raw = await response.text();
+  let payload;
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch {
+    payload = { error: { message: raw } };
+  }
+  if (!response.ok) {
+    throw new Error(payload.error?.message || `Gemini image request failed with ${response.status}`);
+  }
+  const image = imageFromGeminiResponse(payload);
+  if (!image) throw new Error(`Gemini image model ${model} returned no virtual try-on image.`);
+
+  const result = {
+    offerId: offer.id,
+    provider: "gemini",
+    model,
+    url: `data:${image.mimeType};base64,${image.data}`,
+    prompt,
+    promptSummary: "Fashion e-commerce virtual try-on preserving the buyer reference photo and applying the selected pirate costume.",
+    cached: false
+  };
+  if (env.TRYON_CACHE) {
+    await env.TRYON_CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 7 });
+  }
+  return result;
 }
 
 async function cachedProofs(env, request) {
@@ -289,6 +575,62 @@ async function handleApi(request, env) {
         cached: true
       })),
       errors: []
+    });
+  }
+
+  if (method === "POST" && url.pathname === "/api/costumes/try-on") {
+    const offerId = body.offerId || "crew-costume-pack";
+    const personImageUrl = body.personImageUrl || TRY_ON_PERSON_IMAGE;
+    const { offer } = getCostumeTryOnOffer(offerId, offers);
+
+    if (body.dryRun) {
+      return json({
+        offerId,
+        image: {
+          offerId,
+          provider: "dry_run",
+          model: "dry_run",
+          url: offer.image,
+          promptSummary: "Dry run only; no Gemini image or Circle Wallets Arc transfer was created.",
+          cached: false,
+          dryRun: true
+        },
+        nanoTransactions: dryRunTryOnNanoActions(offerId, offers),
+        dryRun: true
+      });
+    }
+
+    const image = await hostedTryOnImage(env, request, offer, personImageUrl);
+    const actions = buildTryOnNanoActions(offerId, offers);
+    let nanoTransactions;
+    let signer = { mode: "circle_wallets_worker", fallback: false };
+    try {
+      nanoTransactions = await runCircleNanoTransfers(env, actions);
+    } catch (error) {
+      nanoTransactions = await cachedNanoFallback(env, request, actions, error);
+      signer = { mode: "cached_arc_fallback", fallback: true, reason: error.message };
+    }
+
+    const state = createInitialState();
+    const tryOn = applyCostumeTryOnResult(state, {
+      offerId,
+      personImageUrl,
+      image,
+      nanoTransactions
+    });
+
+    return json({
+      offerId,
+      image,
+      nanoTransactions: tryOn.nanoTransactions,
+      signer,
+      statePatch: {
+        tryOn,
+        nanopayments: tryOn.nanoTransactions,
+        wallet: {
+          nanopaymentSpent: state.wallet.nanopaymentSpent
+        }
+      }
     });
   }
 
