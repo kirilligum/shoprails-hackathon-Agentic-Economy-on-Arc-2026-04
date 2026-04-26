@@ -1,8 +1,22 @@
 # ShopRails
 
-![ShopRails cover](artifacts/shoprails-cover.png)
+## Live Demo: [https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev](https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev)
+
+**Hosted on Cloudflare Workers.** Judge login: `guest@guest.com` / `aS28ZVhk3upyMzPJY34dw`
+
+![ShopRails cover](docs/screenshots/shoprails-cover.png)
 
 ShopRails lets AI agents buy real goods and services with USDC while buyer policy, risk scoring, Circle Nanopayments, Circle Wallets, and Arc escrow decide what settles now, what waits for review, and what gets declined.
+
+## Screenshots
+
+![ShopRails agent activity and proof panel](docs/screenshots/shoprails-agent-proof-log.png)
+
+![ShopRails client checkout chat with escrow release state](docs/screenshots/shoprails-client-checkout.png)
+
+![ShopRails wallet and nanopayment analytics](docs/screenshots/shoprails-wallet-nanopayments.png)
+
+![ShopRails agent-readable merchant storefronts](docs/screenshots/shoprails-agent-readable-stores.png)
 
 ## Short Description
 
@@ -207,7 +221,7 @@ Technology and category tags:
 
 Cover image:
 
-`artifacts/shoprails-cover.png`
+`docs/screenshots/shoprails-cover.png`
 
 Video presentation:
 
