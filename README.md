@@ -57,25 +57,46 @@ For merchants and API sellers, this also unlocks sub-cent pricing. A catalog que
 ShopRails is one buyer-facing web app plus three deployed service workers: a buyer server, a seller server, and an independent TrustRails scorer. The UI has five demo surfaces: agent activity/proof log, wallet and nanopayment analytics, client checkout chat, scorer checks, and three mini merchant stores for sushi delivery, pirate costumes, and human assistant services.
 
 ```mermaid
-flowchart LR
-  Buyer["Buyer"] --> BuyerServer["Buyer Worker: policy + history"]
-  BuyerServer --> Agent["OpenClaw / LLM agent"]
-  Agent --> Tools["ShopRails MCP-style tools"]
-  Agent --> SellerWorker["Seller Worker: catalog + quote APIs"]
-  SellerWorker --> X402Seller["Circle x402 seller nanopayments"]
-  Agent --> ScorerWorker["TrustRails Scorer Worker"]
-  ScorerWorker --> X402Score["Circle x402 scorer nanopayments"]
-  SellerWorker --> Cart["Proposed cart"]
-  ScorerWorker --> Cart
-  Cart --> Policy["Buyer policy engine"]
-  Policy --> BuyNow["BUY_NOW"]
-  Policy --> Review["REVIEW"]
-  Policy --> Decline["DECLINE_BLACKLISTED"]
-  Review --> Approval["Buyer chat approval"]
-  BuyNow --> ArcPay["Direct Arc USDC seller payment"]
+flowchart TD
+  Buyer["Buyer / Maya"] --> UI["Main UI Worker<br/>shoprails-hackathon...workers.dev"]
+
+  subgraph CF["Cloudflare Workers: separated services"]
+    UI
+    BuyerW["Buyer Server Worker<br/>shoprails-buyer-server"]
+    SellerW["Seller Server Worker<br/>shoprails-seller-server"]
+    ScorerW["Scorer Server Worker<br/>shoprails-scorer-server"]
+  end
+
+  UI --> BuyerW
+  BuyerW --> PolicyData["Buyer policy, budget, wallet state, purchase history"]
+  UI --> Agent["Buyer Agent / OpenClaw + Gemini"]
+
+  Agent --> SellerW
+  SellerW --> SellerAPIs["Catalog search, availability, quotes, purchase intents"]
+  SellerAPIs --> Cart["Proposed cart"]
+
+  Agent --> ScorerW
+  ScorerW --> Score["Trust score, fraud reasons, buy / review / decline hint"]
+  Score --> Cart
+
+  SellerW --> SellerNano["Circle x402 / Gateway seller nanopayments"]
+  ScorerW --> ScorerNano["Circle x402 / Gateway scorer nanopayments"]
+  SellerNano --> NanoLog["Nanopayment log and analytics"]
+  ScorerNano --> NanoLog
+  NanoLog --> UI
+
+  PolicyData --> Decision["Buyer-side policy decision"]
+  Cart --> Decision
+  Decision --> BuyNow["Buy Now"]
+  Decision --> Review["Review in client chat"]
+  Decision --> Block["Declined / Blacklisted"]
+
+  Review --> Approval["Buyer approval"]
+  BuyNow --> ArcPay["Direct Arc USDC payment"]
   Approval --> ArcPay
-  ArcPay --> Sellers["Merchant wallets"]
-  Decline --> Audit["Audit log"]
+  ArcPay --> SellerWallets["Seller wallets"]
+  ArcPay --> ArcProof["ArcScan transaction links"]
+  Block --> Audit["Audit log, no payment"]
 ```
 
 Core objects:
