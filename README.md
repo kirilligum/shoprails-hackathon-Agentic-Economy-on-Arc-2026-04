@@ -14,6 +14,36 @@ Distributed demo workers:
 
 ShopRails lets AI agents pay seller and scorer APIs with sub-cent USDC nanopayments, then make direct Arc USDC purchases after buyer policy approval.
 
+## Why ShopRails
+
+### Problem
+
+Two days before building this, I asked an LLM with a web browser to enter my Mastercard/Visa card details and buy a domain.
+
+That broke down immediately. I could not find an agent-safe virtual Mastercard/Visa service with fine controls for spending limits, domain whitelisting, merchant categorization, and review. More importantly, major LLMs refused to complete a card checkout flow. Practical agentic shopping infrastructure does not really exist yet.
+
+### What We Need
+
+- Agentic shopping guardrails: a classifier/scorer that checks whether transactions are safe before money moves.
+- Human review for purchases that are ambiguous, risky, expensive, or involve human services.
+- Agent-ready input fields and buttons in e-stores so agents understand intent, constraints, and action semantics.
+- Nanopayments, decoupling, and decentralization to lower cost, improve ownership, and reduce security risk.
+
+### Solution
+
+ShopRails is a three-agent system transacting onchain:
+
+- The client agent understands buyer intent, picks products, checks catalogs, verifies availability, and prepares a shopping plan.
+- The seller agent fulfills transactions and enhances the shopping experience with paid APIs, structured product data, quotes, and visualization.
+- The scorer is the guardrail layer: classification, reputation, policy checks, and future collaborative filtering based on anonymized purchase patterns.
+- Nanopayments pay for access to AI inference, databases, scorer checks, and seller services per action instead of forcing agents into overpriced monthly subscriptions across hundreds of providers.
+
+### How To Use
+
+1. Get funds into USDC.
+2. Ask your agent to shop.
+3. Chat with the cart and approve the shopping-list items that need clarification.
+
 New demo proof: the Costume Store includes a Nano Banana virtual try-on. Click the photo button, click `Put on`, and the hosted Worker generates the try-on image while creating four fresh Circle Wallets Arc nano transactions at `0.000001 USDC` each.
 
 Cloudflare is the primary demo and production-like surface. The hosted Worker exposes the same local API families for wallet, catalog, merchant offer lookup, scorer checks, checkout evaluation/submission, review chat/approval, Arc balance, Arc settlement, Arc frequency proofs, x402 receipts, and costume try-on. Stateful demo flows are persisted in Cloudflare KV so review-cart actions survive Worker isolate changes, and hosted Arc signing uses Circle Wallets REST plus Worker WebCrypto instead of a raw local private key.
