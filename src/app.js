@@ -377,6 +377,131 @@ function isTryOnNano(payment) {
   return String(payment.kind || "").startsWith("tryon_") || payment.kind === "visualization_api";
 }
 
+function isScorerNano(payment) {
+  return String(payment.kind || "") === "scorer_api";
+}
+
+function isSellerNano(payment) {
+  return !isTryOnNano(payment) && !isScorerNano(payment);
+}
+
+const hiddenLegacyArcSources = new Set(["review", "contract", "escrow", "escrow release", "refund"]);
+
+function isPrimaryArcTransaction(tx) {
+  return !tx.isNano && !hiddenLegacyArcSources.has(tx.source);
+}
+
+function nanoAmount(payment) {
+  return Number(payment.amountUsdc ?? payment.amount ?? payment.formattedAmount ?? 0);
+}
+
+function nanoHref(payment) {
+  if (payment.txUrl) return payment.txUrl;
+  if (payment.txHash) return arcTxUrl(payment.txHash);
+  if (payment.transferProofUrl) return payment.transferProofUrl;
+  return nanoReceiptUrl(payment.id);
+}
+
+function nanoProofLabel(payment) {
+  if (payment.txHash) return `Arc tx ${shortAddress(payment.txHash)}`;
+  if (payment.transaction) return `Circle transfer ${payment.transaction}`;
+  if (payment.signature) return `x402 receipt ${payment.signature}`;
+  return payment.id || "receipt";
+}
+
+function nanoClass(payment) {
+  if (isTryOnNano(payment)) return "tryon-nano";
+  if (isScorerNano(payment)) return "scorer-nano";
+  if (payment.real || payment.kind === "real_circle_x402_gateway") return "real-nano";
+  return "seller-nano";
+}
+
+function nanoLabel(payment) {
+  return payment.action || payment.purpose || payment.provider || payment.id || "Nano action";
+}
+
+function renderNanoRows(rows) {
+  return rows.map((payment) => `
+    <a class="ledger-row nano-row ${nanoClass(payment)}" href="${nanoHref(payment)}" target="_blank" rel="noreferrer">
+      <span>${escapeHtml(nanoLabel(payment))}</span>
+      <b>${nanoAmount(payment).toFixed(6)} USDC</b>
+      <small>${escapeHtml(payment.provider || payment.paidTo || "Provider")} · ${escapeHtml(payment.endpoint || payment.resource || "paid API")} · ${escapeHtml(payment.status || "accepted")}</small>
+      <small>${escapeHtml(nanoProofLabel(payment))} · ${escapeHtml(payment.rail || payment.scheme || payment.source || "Circle x402")}</small>
+    </a>
+  `).join("");
+}
+
+function renderNanoGroup({ title, subtitle, rows, className }) {
+  if (!rows.length) return "";
+  const total = rows.reduce((sum, payment) => sum + nanoAmount(payment), 0);
+  return `
+    <section class="nano-group ${className}">
+      <div class="nano-group-head">
+        <div>
+          <h4>${title}</h4>
+          <small>${rows.length} actions · ${total.toFixed(6)} USDC</small>
+        </div>
+        <span>${subtitle}</span>
+      </div>
+      <div class="nano-row-stack">
+        ${renderNanoRows(rows)}
+      </div>
+    </section>
+  `;
+}
+
+function realX402Rows() {
+  const payment = state.proofs?.nanopayment?.payment;
+  if (!payment?.transaction) return [];
+  return [{
+    id: "real-circle-x402-transfer",
+    kind: "real_circle_x402_gateway",
+    action: "Real Circle x402 paid API transfer",
+    provider: "Circle Gateway facilitator",
+    endpoint: state.proofs?.nanopayment?.url || "/api/x402/premium-catalog",
+    amount: Number(payment.formattedAmount || payment.amount || 0),
+    status: payment.status || "paid",
+    transaction: payment.transaction,
+    transferProofUrl: payment.transferProofUrl,
+    rail: "Circle Gateway x402",
+    real: true
+  }];
+}
+
+function gatewaySetupNanoRows() {
+  const deposit = state.proofs?.nanopayment?.deposit;
+  const rows = [];
+  if (deposit?.approvalTxHash) {
+    rows.push({
+      id: "gateway-approval-nano-infra",
+      kind: "real_circle_x402_gateway",
+      action: "Gateway allowance approval",
+      provider: "Circle Gateway",
+      endpoint: "GatewayWalletBatched approval",
+      amount: Number(deposit.amount || 0),
+      status: "confirmed",
+      txHash: deposit.approvalTxHash,
+      rail: "Arc Testnet setup",
+      real: true
+    });
+  }
+  if (deposit?.depositTxHash) {
+    rows.push({
+      id: "gateway-deposit-nano-infra",
+      kind: "real_circle_x402_gateway",
+      action: "Gateway balance deposit",
+      provider: "Circle Gateway",
+      endpoint: "GatewayWalletBatched deposit",
+      amount: Number(deposit.amount || 0),
+      status: "confirmed",
+      txHash: deposit.depositTxHash,
+      rail: "Arc Testnet setup",
+      real: true
+    });
+  }
+  return rows;
+}
+
 function mergeTryOnPayload(payload) {
   if (payload.state) {
     state = payload.state;
@@ -403,7 +528,8 @@ function isMissionRequest(message) {
 }
 
 function recentArcTx() {
-  const latest = collectArcTransactions()[0];
+  const transactions = collectArcTransactions();
+  const latest = transactions.find(isPrimaryArcTransaction) || transactions[0];
   return latest?.hash ? {
     label: latest.label,
     hash: latest.hash
@@ -552,7 +678,8 @@ function collectArcTransactions() {
       blockNumber: nano.deposit.approvalBlockNumber,
       status: "real Arc approval",
       source: "Circle Gateway",
-      counterparty: "GatewayWalletBatched"
+      counterparty: "GatewayWalletBatched",
+      isNano: true
     });
   }
   if (nano?.deposit?.depositTxHash) {
@@ -564,7 +691,8 @@ function collectArcTransactions() {
       blockNumber: nano.deposit.depositBlockNumber,
       status: "real Circle Gateway deposit",
       source: "Circle Gateway",
-      counterparty: "x402 catalog funding"
+      counterparty: "x402 catalog funding",
+      isNano: true
     });
   }
 
@@ -592,6 +720,7 @@ function collectArcTransactions() {
       status: payment.status || "confirmed",
       source: payment.source || payment.rail || "Circle Nanopayments",
       counterparty: payment.provider || payment.paidTo || "provider",
+      isNano: true,
       sortKey: payment.blockNumber ? undefined : Date.now()
     });
   }
@@ -605,7 +734,8 @@ function collectArcTransactions() {
       blockNumber: tx.blockNumber,
       status: `${tx.status}; ${tx.latencyMs} ms`,
       source: "Arc microtransaction burst",
-      counterparty: tx.seller
+      counterparty: tx.seller,
+      isNano: true
     });
   }
 
@@ -615,7 +745,8 @@ function collectArcTransactions() {
 function collectSimulatedTransactions() {
   const rows = [];
   for (const item of [...state.orders, ...state.reviewCart]) {
-    if (item.simulatedSettlementId) {
+    const hasRealSettlement = Boolean(item.txHash || item.releaseTxHash);
+    if (item.simulatedSettlementId && !hasRealSettlement) {
       rows.push({
         id: item.simulatedSettlementId,
         label: `${item.offerName} ${item.stage === DecisionStage.BUY_NOW ? "policy decision" : "review-required decision"}`,
@@ -623,7 +754,7 @@ function collectSimulatedTransactions() {
         status: item.txHash || item.releaseTxHash ? "backed by real Arc tx" : `${item.escrowStatus} · direct payment not submitted yet`
       });
     }
-    if (item.simulatedReleaseId) {
+    if (item.simulatedReleaseId && !item.releaseTxHash) {
       rows.push({
         id: item.simulatedReleaseId,
         label: `${item.offerName} buyer-approved direct payment`,
@@ -638,8 +769,8 @@ function collectSimulatedTransactions() {
 function nanoStats() {
   const simulatedTotal = state.nanopayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const tryOnApi = state.nanopayments.filter(isTryOnNano);
-  const sellerApi = state.nanopayments.filter((payment) => payment.kind !== "scorer_api" && !isTryOnNano(payment));
-  const scorerApi = state.nanopayments.filter((payment) => payment.kind === "scorer_api" || payment.kind === "tryon_scorer");
+  const sellerApi = state.nanopayments.filter(isSellerNano);
+  const scorerApi = state.nanopayments.filter(isScorerNano);
   const tryOnTotal = tryOnApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const scorerTotal = scorerApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const sellerTotal = sellerApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
@@ -1163,59 +1294,89 @@ function renderFulfillment() {
   `;
 }
 
-function renderTryOnNanoLedger() {
-  const rows = state.tryOn?.nanoTransactions || state.nanopayments.filter(isTryOnNano);
-  if (!rows.length) {
+function renderNanoTransactionHub() {
+  const allRows = state.nanopayments || [];
+  const tryOnRows = allRows.filter(isTryOnNano);
+  const sellerRows = allRows.filter(isSellerNano);
+  const scorerRows = allRows.filter(isScorerNano);
+  const x402Rows = [...realX402Rows(), ...gatewaySetupNanoRows()];
+  const totalRows = tryOnRows.length + sellerRows.length + scorerRows.length + x402Rows.length;
+
+  if (!totalRows) {
     return `
-      <div class="tryon-ledger empty-tryon">
-        <div>
-          <b>Virtual try-on nano transactions</b>
-          <small>Click Stores > Costume Store > photo icon > Put on to create four highlighted Arc nano txs.</small>
+      <div class="nano-hub empty-nano-hub">
+        <div class="nano-hub-head">
+          <div>
+            <h3>Agent API nanopayments</h3>
+            <p>Seller discovery, TrustRails scoring, and Nano Banana try-on payments appear here after the agent runs.</p>
+          </div>
+          <span>sub-cent USDC</span>
+        </div>
+        <div class="nano-next-proof">
+          Run the mission for seller/scorer receipts, or open Stores > Costume Store > load Kirill photo > Put on to create four highlighted virtual try-on nano txs.
         </div>
       </div>
     `;
   }
 
-  const total = rows.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   return `
-    <div class="tryon-ledger">
-      <div class="tryon-ledger-head">
+    <div class="nano-hub">
+      <div class="nano-hub-head">
         <div>
-          <b>Virtual try-on nano transactions</b>
-          <small>${rows.length} txs · ${total.toFixed(6)} USDC · each action is below $0.01</small>
+          <h3>Agent API nanopayments (${totalRows})</h3>
+          <p>These are the paid API calls before checkout, separated from final seller settlement.</p>
         </div>
-        ${state.tryOn?.selectedOfferName ? `<span>${state.tryOn.selectedOfferName}</span>` : ""}
+        <span>all under $0.01/action</span>
       </div>
-      ${rows.map((payment) => {
-        const href = payment.txUrl || (payment.txHash ? arcTxUrl(payment.txHash) : nanoReceiptUrl(payment.id));
-        return `
-          <a class="ledger-row tryon-nano" href="${href}" target="_blank" rel="noreferrer">
-            <span>${payment.action || payment.provider}</span>
-            <b>${Number(payment.amount || 0).toFixed(6)} USDC</b>
-            <small>${payment.provider} · ${payment.endpoint} · ${payment.status || "pending"}</small>
-            <small>${payment.txHash ? shortAddress(payment.txHash) : "no Arc hash yet"} · ${payment.source || payment.rail || "Circle Nanopayments"}</small>
-          </a>
-        `;
-      }).join("")}
+      ${tryOnRows.length ? renderNanoGroup({
+        title: "Virtual try-on nano transactions",
+        subtitle: state.tryOn?.selectedOfferName || "Nano Banana flow",
+        rows: tryOnRows,
+        className: "tryon-group"
+      }) : `
+        <div class="nano-next-proof">
+          Next live nano proof: use Costume Store > Put on to create four orange 0.000001 USDC Arc nano txs.
+        </div>
+      `}
+      ${renderNanoGroup({
+        title: "Seller catalog and quote APIs",
+        subtitle: "seller server",
+        rows: sellerRows,
+        className: "seller-group"
+      })}
+      ${renderNanoGroup({
+        title: "TrustRails scorer API",
+        subtitle: "independent scorer",
+        rows: scorerRows,
+        className: "scorer-group"
+      })}
+      ${renderNanoGroup({
+        title: "Real Circle x402 / Gateway proof",
+        subtitle: "Circle infrastructure",
+        rows: x402Rows,
+        className: "real-x402-group"
+      })}
     </div>
   `;
 }
 
 function renderTransactionLedger() {
   const arcTransactions = collectArcTransactions();
+  const settlementTransactions = arcTransactions.filter(isPrimaryArcTransaction);
   const simulatedTransactions = collectSimulatedTransactions();
   return `
     <div class="ledger">
       <div class="ledger-col">
-        <h3>Real Arc transactions (${arcTransactions.length}, newest first)</h3>
-        ${arcTransactions.map((tx) => `
+        <h3>Direct Arc seller payments (${settlementTransactions.length}, newest first)</h3>
+        <p class="ledger-note">This lane shows the decentralized purchase path: buyer wallet funding plus direct USDC payments to sellers. Nano API proofs are grouped separately so they do not get buried in raw Arc activity.</p>
+        ${settlementTransactions.length ? settlementTransactions.map((tx) => `
           <a class="ledger-row" href="${tx.href}" target="_blank" rel="noreferrer">
             <span>${tx.label}</span>
             <b>${formatDisplayUsdc(tx.amount)}</b>
             <small><strong>Block ${tx.blockNumber || "pending"}</strong> · ${tx.source || "Arc"} · ${tx.counterparty || "counterparty"}</small>
             <small><code>${shortAddress(tx.hash)}</code> · ${tx.status}</small>
           </a>
-        `).join("")}
+        `).join("") : `<div class="ledger-row empty-ledger-row"><span>No final seller payments yet</span><small>Run the mission, approve reviewed items, then direct seller payment proofs will appear here.</small></div>`}
         ${simulatedTransactions.length ? `<h3>Simulated ShopRails settlements</h3>` : ""}
         ${simulatedTransactions.map((tx) => `
           <div class="ledger-row simulated">
@@ -1226,23 +1387,7 @@ function renderTransactionLedger() {
         `).join("")}
       </div>
       <div class="ledger-col">
-        <h3>Nano transactions</h3>
-        ${renderTryOnNanoLedger()}
-        ${state.proofs?.nanopayment?.payment?.transaction ? `
-          <a class="ledger-row real-nano" href="${state.proofs.nanopayment.payment.transferProofUrl}" target="_blank" rel="noreferrer">
-            <span>Real Circle x402 transfer</span>
-            <b>${state.proofs.nanopayment.payment.formattedAmount} USDC</b>
-            <small>${state.proofs.nanopayment.payment.transaction}</small>
-          </a>
-        ` : ""}
-        ${state.nanopayments.length ? state.nanopayments.map((payment) => `
-          <a class="ledger-row ${isTryOnNano(payment) ? "tryon-nano compact-tryon" : ""}" href="${payment.txUrl || (payment.txHash ? arcTxUrl(payment.txHash) : nanoReceiptUrl(payment.id))}" target="_blank" rel="noreferrer">
-            <span>${payment.action || payment.id} ${payment.protocol}/${payment.scheme}</span>
-            <b>${payment.amount.toFixed(6)} USDC</b>
-            <small>${payment.request}</small>
-            ${payment.txHash ? `<small>${shortAddress(payment.txHash)} · ${payment.status || "confirmed"}</small>` : ""}
-          </a>
-        `).join("") : `<p class="empty log-empty">Run the mission to create x402 receipt links.</p>`}
+        ${renderNanoTransactionHub()}
       </div>
     </div>
   `;
