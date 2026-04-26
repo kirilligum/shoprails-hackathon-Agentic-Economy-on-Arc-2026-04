@@ -10,7 +10,9 @@
     "circle:setup": "node scripts/setup-circle-wallets.mjs",
     "circle:transfer": "node scripts/run-circle-wallet-transfer.mjs",
     "arc:frequency": "node scripts/run-arc-frequency-demo.mjs",
-    "demo:capture": "node scripts/capture-demo.mjs"
+    "demo:capture": "node scripts/capture-demo.mjs",
+    "cloudflare:build": "node scripts/build-cloudflare-assets.mjs",
+    "cloudflare:deploy": "npm run cloudflare:build && wrangler deploy"
   },
   "keywords": [
     "shoprails",
@@ -28,5 +30,8 @@
     "ethers": "^6.16.0",
     "solc": "^0.8.34",
     "viem": "^2.48.4"
+  },
+  "devDependencies": {
+    "wrangler": "^4.85.0"
   }
 }

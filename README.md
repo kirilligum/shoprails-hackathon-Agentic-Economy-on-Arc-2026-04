@@ -135,7 +135,13 @@ npm install
 npm start
 ```
 
-Open `http://localhost:4173`.
+Open `http://localhost:4173` for local development, or use the hosted Cloudflare demo:
+
+```text
+URL: https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev
+Login: guest@guest.com
+Password: aS28ZVhk3upyMzPJY34dw
+```
 
 The safest hackathon path is click-only:
 
@@ -219,13 +225,20 @@ Public GitHub repository:
 
 Demo application platform:
 
-Local Node.js for the current hackathon build; Vercel or Render is the planned hosted demo path.
+Cloudflare Workers with static assets and a lightweight Worker API replaying cached real Arc/Circle proof artifacts.
 
 Application URL:
 
+Hosted: `https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev`
+
 Local: `http://localhost:4173`
 
-Hosted: `TBD after deployment`
+Judge demo credentials:
+
+```text
+Login: guest@guest.com
+Password: aS28ZVhk3upyMzPJY34dw
+```
 
 ### Required Transaction Flow Demonstration
 

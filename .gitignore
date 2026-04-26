@@ -1,10 +1,12 @@
 .env
 .env.*
 !.env.example
+.dev.vars
 artifacts/arc-demo-wallet.json
 artifacts/circle-wallets-recovery/
 artifacts/edge-*/
 artifacts/*-profile/
+dist/
 server.log
 server.err
 node_modules/
