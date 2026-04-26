@@ -2506,6 +2506,77 @@ textarea:focus {
   background: rgba(223, 249, 255, 0.74);
 }
 
+.action-control {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: minmax(0, auto) auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.action-control > button,
+.action-control > a {
+  min-width: 0;
+}
+
+.wide-action-control,
+.demo-rail .action-control,
+.runtime-row .action-control,
+.quote-card .action-control {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.hero-actions .action-control,
+.product-actions .action-control,
+.offer-detail-actions .action-control,
+.cart-actions .action-control,
+.store-actions .action-control,
+.top-actions .action-control,
+.fund-actions .action-control {
+  flex: 0 1 auto;
+}
+
+.action-aii {
+  position: relative;
+  display: inline-grid;
+  align-items: center;
+}
+
+.action-ai-help {
+  min-width: 34px;
+  min-height: 30px;
+  padding: 0 8px;
+  color: rgba(13, 29, 44, 0.48);
+  background: rgba(255, 254, 250, 0.68);
+}
+
+.action-instruction {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(420px, 84vw);
+  max-height: 360px;
+  text-align: left;
+  box-shadow: 3px 3px 0 rgba(17, 32, 31, 0.72), 0 18px 44px rgba(13, 29, 44, 0.16);
+}
+
+.top-actions .action-instruction,
+.store-actions .action-instruction,
+.cart-actions .action-instruction {
+  right: 0;
+}
+
+.product-actions .action-instruction,
+.offer-detail-actions .action-instruction,
+.hero-actions .action-instruction,
+.quote-card .action-instruction {
+  left: auto;
+  right: 0;
+}
+
 .tryon-panel {
   background: #fffefa;
 }
