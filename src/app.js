@@ -964,34 +964,190 @@ function renderStore() {
   const merchant = getMerchant(store.merchantId, state.merchants);
   const offers = merchantOffers(store.merchantId);
 
+  if (store.id === "assistant") {
+    return renderAssistantMarketplace(store, merchant, offers);
+  }
+
+  return renderCommerceStore(store, merchant, offers);
+}
+
+function renderAiFields(store, modifier = "") {
   return `
-    <div class="store">
-      <div class="store-form">
-        <h3>${merchant.name}</h3>
-        ${store.fields.map((field) => `
-          <label class="ai-field">
-            <span>${field.label}</span>
-            <div class="input-row">
-              ${field.type === "textarea"
-                ? `<textarea data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">${field.value}</textarea>`
-                : `<input value="${field.value}" data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">`}
-              <button type="button" class="ai-help" data-help="${store.id}:${field.id}" alt="AI field instructions" aria-label="AI field instructions">AI</button>
-            </div>
-            ${activeInstruction === `${store.id}:${field.id}` ? `<small class="instruction">${field.ai}</small>` : ""}
-          </label>
-        `).join("")}
+    <div class="ai-fields ${modifier}">
+      ${store.fields.map((field) => `
+        <label class="ai-field">
+          <span>${field.label}</span>
+          <div class="input-row">
+            ${field.type === "textarea"
+              ? `<textarea data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">${field.value}</textarea>`
+              : `<input value="${field.value}" data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">`}
+            <button type="button" class="ai-help" data-help="${store.id}:${field.id}" alt="AI field instructions" aria-label="AI field instructions">AI</button>
+          </div>
+          ${activeInstruction === `${store.id}:${field.id}` ? `<small class="instruction">${field.ai}</small>` : ""}
+        </label>
+      `).join("")}
+    </div>
+  `;
+}
+
+function commerceBadgeForOffer(offer) {
+  const merchant = getMerchant(offer.merchantId, state.merchants);
+  if (merchant.trustTier === "blocked") return { label: "Blocked", className: "blocked" };
+  if (offer.category === "assistant" || offer.price > (state.policy.autoApproveByCategory[offer.category] || 0)) {
+    return { label: "Review", className: "review" };
+  }
+  return { label: "Buy now", className: "good" };
+}
+
+function renderCommerceStore(store, merchant, offers) {
+  const heroOffer = offers[0];
+  const cartTotal = offers.reduce((sum, offer) => sum + offer.price, 0);
+
+  return `
+    <div class="commerce-store" data-ai-description="ShopRails merchant storefront for ${merchant.name}. Product cards expose machine-readable offer IDs, delivery windows, prices, and risk signals.">
+      <div class="commerce-banner">
+        <span>${merchant.name}</span>
+        <b>${store.id === "sushi" ? "Friday office delivery" : "Party-ready pirate supplies"}</b>
+        <small>${merchant.rating.toFixed(1)} stars · ${merchant.trustTier} seller · ${merchant.domain}</small>
       </div>
-      <div class="products">
-        ${offers.map((offer) => `
-          <article class="product" data-shoprails-offer-id="${offer.id}" data-ai-description="${offer.reason}">
-            <img src="${offer.image}" alt="${offer.name} product preview">
+      <div class="commerce-layout">
+        <aside class="agent-order-panel">
+          <div>
+            <p class="eyebrow">Agent checkout context</p>
+            <h3>${store.id === "sushi" ? "Dinner delivery details" : "Theme and sizing"}</h3>
+          </div>
+          ${renderAiFields(store, "stacked")}
+          <div class="mini-cart" data-ai-description="Projected merchant cart summary for the agent before ShopRails policy evaluation.">
+            <span>Suggested cart</span>
+            <b>${formatUsdc(cartTotal)}</b>
+            <small>${offers.length} offer${offers.length === 1 ? "" : "s"} · Arc demo settlement at price / 100,000</small>
+          </div>
+        </aside>
+        <section class="shopfront">
+          <div class="shop-hero" data-ai-description="${heroOffer?.reason || "Featured merchant offer"}">
             <div>
-              <h4>${offer.name}</h4>
-              <p>${offer.quantityLabel}</p>
-              <b>${formatUsdc(offer.price)}</b>
+              <p class="eyebrow">${store.id === "sushi" ? "Chef selected" : "Party bundle"}</p>
+              <h3>${heroOffer?.name || merchant.name}</h3>
+              <p>${heroOffer?.reason || "Agent-readable storefront offer."}</p>
+              <div class="hero-actions">
+                <button class="primary" type="button">Add to intent</button>
+                <button class="ghost-light" type="button">Compare policy</button>
+              </div>
             </div>
-          </article>
-        `).join("")}
+            ${heroOffer ? `<img src="${heroOffer.image}" alt="${heroOffer.name} featured product image">` : ""}
+          </div>
+          <div class="commerce-toolbar">
+            <div>
+              <b>${store.id === "sushi" ? "Delivery menu" : "Costumes and props"}</b>
+              <span>Sorted by agent fit and policy risk</span>
+            </div>
+            <div class="commerce-filters" aria-label="Storefront filters">
+              <span>In stock</span>
+              <span>Arrives Friday</span>
+              <span>USDC ready</span>
+            </div>
+          </div>
+          <div class="shopify-grid">
+            ${offers.map((offer) => {
+              const badge = commerceBadgeForOffer(offer);
+              return `
+                <article class="shop-product" data-shoprails-offer-id="${offer.id}" data-ai-description="${offer.reason}">
+                  <div class="product-media">
+                    <img src="${offer.image}" alt="${offer.name} product preview">
+                    <span class="store-badge ${badge.className}">${badge.label}</span>
+                  </div>
+                  <div class="shop-product-body">
+                    <div>
+                      <h4>${offer.name}</h4>
+                      <p>${offer.quantityLabel}</p>
+                    </div>
+                    <b>${formatUsdc(offer.price)}</b>
+                    <small>${offer.deliveryWindow}</small>
+                    <div class="product-meta">
+                      <span>Risk ${offer.riskScore}</span>
+                      <span>${offer.brand}</span>
+                    </div>
+                    <button class="ghost-light" type="button">View offer</button>
+                  </div>
+                </article>
+              `;
+            }).join("")}
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+function renderAssistantMarketplace(store, merchant, offers) {
+  const primary = offers[0];
+  return `
+    <div class="service-marketplace" data-ai-description="ShopRails human-services marketplace. Agents must specify work scope, timing, acceptance criteria, and buyer review before payment release.">
+      <div class="service-searchbar">
+        <div>
+          <p class="eyebrow">Human assistant marketplace</p>
+          <h3>Hire setup help near the office</h3>
+        </div>
+        <div class="service-query" data-ai-description="Search parameters for matching a human assistant to the buyer's dinner setup task.">
+          <span>Office dinner setup</span>
+          <span>Friday 5:30 PM</span>
+          <span>MindsDB office</span>
+        </div>
+      </div>
+      <div class="service-layout">
+        <aside class="service-brief">
+          <h3>Job brief for agent</h3>
+          ${renderAiFields(store, "stacked")}
+          <div class="scope-list">
+            <b>Scope checklist</b>
+            <span>Receive deliveries</span>
+            <span>Unpack sushi and serving kit</span>
+            <span>Place pirate props</span>
+            <span>Text completion photos</span>
+          </div>
+          <div class="review-required">
+            <span>Buyer review required</span>
+            <b>${formatUsdc(primary?.price || 0)}</b>
+            <small>Human labor always routes to escrow.</small>
+          </div>
+        </aside>
+        <section class="pro-results">
+          <div class="results-head">
+            <b>Best matches</b>
+            <span>Ranked by availability, rating, and task fit</span>
+          </div>
+          ${offers.map((offer) => `
+            <article class="pro-card" data-shoprails-offer-id="${offer.id}" data-ai-description="${offer.reason}">
+              <img src="${offer.image}" alt="${offer.name} profile photo">
+              <div class="pro-main">
+                <div class="pro-title">
+                  <div>
+                    <h4>${offer.name}</h4>
+                    <p>${merchant.name} · ${merchant.domain}</p>
+                  </div>
+                  <span class="store-badge review">Review escrow</span>
+                </div>
+                <div class="pro-stats">
+                  <span>${merchant.rating.toFixed(1)} rating</span>
+                  <span>${offer.unit}</span>
+                  <span>Risk ${offer.riskScore}</span>
+                </div>
+                <p>${offer.reason}</p>
+                <div class="service-instructions">
+                  <b>Instructions for assistant</b>
+                  <span>${offer.serviceInstructions || store.fields.find((field) => field.id === "instructions")?.value || "See task instructions."}</span>
+                </div>
+              </div>
+              <aside class="quote-card">
+                <span>Fixed quote</span>
+                <b>${formatUsdc(offer.price)}</b>
+                <small>${offer.deliveryWindow}</small>
+                <button class="secondary" type="button">Request booking</button>
+                <button class="ghost-light" type="button">Message pro</button>
+              </aside>
+            </article>
+          `).join("")}
+        </section>
       </div>
     </div>
   `;
