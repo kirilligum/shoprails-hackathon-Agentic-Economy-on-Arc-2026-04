@@ -672,14 +672,42 @@ export const storefronts = [
         label: "Delivery time",
         type: "text",
         value: "Friday 6:40 PM",
-        ai: "Choose a delivery time that lands 10 to 30 minutes before the meal time. Use local office time."
+        ai: `Purpose: choose the requested arrival time for the food delivery, not the guest arrival time.
+
+Context for this buyer: the dinner starts Friday, May 1, 2026 at 7:00 PM at the MindsDB office in San Francisco. The buyer needs food in the room before guests arrive, but not so early that sushi sits out for too long.
+
+Agent rule: target delivery between 6:00 PM and 6:30 PM local Pacific time. If the store only offers a later slot, route the order to buyer review. If the slot is after 6:45 PM, reject it unless the buyer explicitly says late delivery is acceptable.
+
+Good few-shot examples:
+- Buyer says "dinner at 7 PM" -> set delivery to "Friday 6:15 PM" or "Friday 6:30 PM".
+- Buyer says "office party, assistant arrives at 6" -> choose a slot after assistant arrival, e.g. "Friday 6:15 PM".
+- Store offers 5:15, 6:15, 6:50 -> choose 6:15; 6:50 is too close to guest arrival.
+
+Bad examples:
+- Do not set the field to "7 PM"; that is the event start, not delivery.
+- Do not choose "ASAP" unless the buyer asked for immediate delivery.
+- Do not invent a delivery address; use the known MindsDB office context from the mission.`
       },
       {
         id: "diet-notes",
         label: "Diet notes",
         type: "text",
         value: "Include vegetarian rolls",
-        ai: "Mention known dietary constraints and avoid inventing allergies not supplied by the buyer."
+        ai: `Purpose: communicate dietary preferences that affect the order composition. This field should help the seller build a safer platter for a mixed group.
+
+Context for this buyer: the user did not provide allergies or religious restrictions. The agent should include a reasonable vegetarian option for 10 guests, but must not fabricate allergies, medical restrictions, or guest identities.
+
+Agent rule: include known constraints and low-risk preferences. Use neutral language such as "include vegetarian rolls" and "label vegetarian pieces separately." If allergies are unknown, say they are unknown instead of guessing.
+
+Good few-shot examples:
+- Buyer says "10 people, sushi dinner" -> "Include vegetarian rolls; label vegetarian pieces separately."
+- Buyer says "one vegetarian friend" -> "Include vegetarian rolls for at least 1 guest; keep vegetarian pieces grouped."
+- Buyer says "no dietary info" -> "Include vegetarian rolls; allergies not specified."
+
+Bad examples:
+- Do not write "gluten-free" or "nut allergy" unless the buyer said so.
+- Do not ask the sushi seller to optimize for pirate theme in food safety fields.
+- Do not remove fish entirely unless the buyer asked for vegetarian sushi.`
       }
     ]
   },
@@ -693,14 +721,42 @@ export const storefronts = [
         label: "Sizing plan",
         type: "text",
         value: "One-size accessories",
-        ai: "When exact sizes are unavailable, prefer adjustable accessories over fitted garments."
+        ai: `Purpose: describe how the costume seller should handle fit without requiring individual guest measurements.
+
+Context for this buyer: the mission asks for pirate one-size costumes for 10 people. The agent does not know guests' sizes. Prefer adjustable accessories, hats, sashes, loose vests, and props over fitted garments.
+
+Agent rule: if exact sizes are unknown, choose items described as one-size, adjustable, elastic, accessory-based, or bulk party kits. Avoid fitted coats, boots, pants, corsets, or anything requiring body measurements unless routed to review.
+
+Good few-shot examples:
+- Buyer says "10 people, one-size costumes" -> "10 adjustable one-size kits: hats, sashes, vests, eye patches."
+- Store has "one-size accessory kit" and "tailored captain coat" -> prefer one-size kit for group purchase; use coat only for virtual try-on or buyer review.
+- Guest count is 10 -> quantity should be 10 kits or one bundle explicitly serving 10 people.
+
+Bad examples:
+- Do not choose mixed S/M/L sizes unless the buyer provides a size distribution.
+- Do not assume gendered sizing.
+- Do not buy a single costume when the prompt asks for the whole group.`
       },
       {
         id: "theme",
         label: "Theme",
         type: "text",
         value: "Friendly pirate dinner",
-        ai: "Use the buyer's party theme. Avoid weapons or props that create office safety problems."
+        ai: `Purpose: translate the buyer's event theme into seller-safe product filters and visual styling.
+
+Context for this buyer: this is an office sushi dinner with friends, not a theatrical combat scene. The theme should read as playful pirate decor and simple costumes.
+
+Agent rule: prefer friendly, office-safe pirate styling: hats, sashes, striped shirts, table flags, maps, coins, and photo-friendly accessories. Avoid realistic weapons, sharp props, scary masks, alcohol-themed accessories, or anything that creates workplace safety concerns.
+
+Good few-shot examples:
+- "Pirate theme for office dinner" -> "friendly pirate dinner; hats, sashes, table props, no realistic weapons."
+- "Cheap props" -> "eye patches, paper flags, table runner, plastic coins."
+- "Virtual try-on" -> generate a clean retail preview of the outfit, not a fantasy battle scene.
+
+Bad examples:
+- Do not select realistic swords, firearms, or sharp hooks.
+- Do not make the theme dark, threatening, or costume-party chaotic.
+- Do not override buyer policy just because an item matches the theme.`
       }
     ]
   },
@@ -714,14 +770,42 @@ export const storefronts = [
         label: "Arrival window",
         type: "text",
         value: "Friday 5:30 PM",
-        ai: "Schedule enough time before guest arrival to receive deliveries and unpack food."
+        ai: `Purpose: define when the human assistant should arrive onsite. This controls whether the assistant can receive deliveries, stage costumes, and finish setup before guests arrive.
+
+Context for this buyer: dinner starts at 7:00 PM. Sushi should arrive by about 6:15-6:30 PM. The assistant needs time to find the office, coordinate lobby access, receive deliveries, unpack items, and send completion photos.
+
+Agent rule: choose an assistant arrival between 5:30 PM and 6:00 PM. If the assistant can only arrive after 6:30 PM, route to review or reject because they cannot reliably receive food and set up before the event.
+
+Good few-shot examples:
+- Event starts 7 PM, delivery target 6:15 PM -> assistant arrival "Friday 5:45 PM".
+- Seller offers 5:30-7:30 and 6:45-8:45 -> choose 5:30-7:30.
+- If the assistant handles lobby delivery -> arrival must be before the first delivery window.
+
+Bad examples:
+- Do not set arrival to 7 PM; that is too late.
+- Do not book a same-time arrival and delivery if the office has lobby access friction.
+- Do not leave timing vague as "evening" when the seller needs a precise shift.`
       },
       {
         id: "instructions",
         label: "Task instructions",
         type: "textarea",
         value: "Receive deliveries, set table for 10, place pirate props, text completion photos.",
-        ai: "Give clear, bounded instructions. Include location, timing, acceptance criteria, and what not to do."
+        ai: `Purpose: convert the buyer's vague "set it up" request into bounded work instructions a human can accept, price, and complete.
+
+Context for this buyer: the assistant is not a party planner with unlimited discretion. They should receive deliveries, unpack items, stage the dinner area, and communicate status. This is a human-services purchase, so ShopRails always routes it to buyer review before payment.
+
+Agent rule: instructions must include timing, location context, concrete tasks, escalation criteria, and acceptance criteria. Keep the scope to 2-3 hours and avoid asking for anything unsafe, personal, or open-ended.
+
+Good few-shot examples:
+- "Arrive at MindsDB office lobby by 5:45 PM. Receive sushi and costume deliveries. Bring items to the event room. Set table for 10. Place pirate props and costumes near entrance. Send completion photos by 6:50 PM."
+- "If sushi has not arrived by 6:30 PM, text the buyer. Keep food labels visible. Do not discard receipts."
+- "After setup, consolidate packaging near trash/recycling but do not move personal office items."
+
+Bad examples:
+- Do not ask the assistant to buy extra items with their own money.
+- Do not ask them to access private office areas, computers, documents, or guest personal data.
+- Do not leave the task as "make it nice"; define what complete means.`
       }
     ]
   }

@@ -1216,18 +1216,24 @@ function renderStore() {
 function renderAiFields(store, modifier = "") {
   return `
     <div class="ai-fields ${modifier}">
-      ${store.fields.map((field) => `
+      ${store.fields.map((field) => {
+        const fieldId = `${store.id}:${field.id}`;
+        const label = escapeHtml(field.label);
+        const value = escapeHtml(field.value);
+        const aiDescription = escapeHtml(field.ai);
+        return `
         <label class="ai-field">
-          <span>${field.label}</span>
+          <span>${label}</span>
           <div class="input-row">
             ${field.type === "textarea"
-              ? `<textarea data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">${field.value}</textarea>`
-              : `<input value="${field.value}" data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">`}
-            <button type="button" class="ai-help" data-help="${store.id}:${field.id}" alt="AI field instructions" aria-label="AI instructions for ${field.label}">AII</button>
+              ? `<textarea data-ai-description="${aiDescription}" data-shoprails-field="${escapeHtml(field.id)}" aria-label="${label}">${value}</textarea>`
+              : `<input value="${value}" data-ai-description="${aiDescription}" data-shoprails-field="${escapeHtml(field.id)}" aria-label="${label}">`}
+            <button type="button" class="ai-help" data-help="${fieldId}" alt="AI field instructions" aria-label="AI instructions for ${label}">AII</button>
           </div>
-          ${activeInstruction === `${store.id}:${field.id}` ? `<small class="instruction">${field.ai}</small>` : ""}
+          ${activeInstruction === fieldId ? `<small class="instruction">${aiDescription}</small>` : ""}
         </label>
-      `).join("")}
+      `;
+      }).join("")}
     </div>
   `;
 }
