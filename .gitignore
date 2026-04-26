@@ -7,6 +7,7 @@ artifacts/circle-wallets-recovery/
 artifacts/edge-*/
 artifacts/*-profile/
 artifacts/*.log
+artifacts/screenshots/theme-*.png
 dist/
 server.log
 server.err

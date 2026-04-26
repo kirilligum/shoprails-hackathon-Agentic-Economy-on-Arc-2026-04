@@ -1223,7 +1223,7 @@ function renderAiFields(store, modifier = "") {
             ${field.type === "textarea"
               ? `<textarea data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">${field.value}</textarea>`
               : `<input value="${field.value}" data-ai-description="${field.ai}" data-shoprails-field="${field.id}" aria-label="${field.label}">`}
-            <button type="button" class="ai-help" data-help="${store.id}:${field.id}" alt="AI field instructions" aria-label="AI field instructions">AI</button>
+            <button type="button" class="ai-help" data-help="${store.id}:${field.id}" alt="AI field instructions" aria-label="AI instructions for ${field.label}">AII</button>
           </div>
           ${activeInstruction === `${store.id}:${field.id}` ? `<small class="instruction">${field.ai}</small>` : ""}
         </label>
@@ -1392,9 +1392,9 @@ function renderCommerceStore(store, merchant, offers) {
           </div>
           ${renderAiFields(store, "stacked")}
           <div class="mini-cart" data-ai-description="Projected merchant cart summary for the agent before ShopRails policy evaluation.">
-            <span>Suggested cart</span>
-            <b>${formatUsdc(cartTotal)}</b>
-            <small>${offers.length} offer${offers.length === 1 ? "" : "s"} · Arc demo settlement at price / 100,000</small>
+            <span>Visible catalog</span>
+            <b>${offers.length} offers</b>
+            <small>${formatUsdc(cartTotal)} listed value · selected items settle at price / 100,000</small>
           </div>
         </aside>
         <section class="shopfront">

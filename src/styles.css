@@ -1,16 +1,21 @@
 :root {
-  --bg: #f5f7fb;
-  --panel: #ffffff;
-  --ink: #172033;
-  --muted: #657084;
-  --line: #dfe5ef;
-  --blue: #2457d6;
-  --green: #12805c;
-  --amber: #b05d00;
-  --red: #c52f37;
-  --violet: #6246ad;
-  --cyan: #087ea4;
-  --shadow: 0 18px 50px rgba(23, 32, 51, 0.08);
+  --bg: #edf8fb;
+  --panel: #fffdf7;
+  --ink: #102033;
+  --muted: #627084;
+  --line: rgba(16, 32, 51, 0.16);
+  --blue: #1867c0;
+  --green: #0c8f77;
+  --amber: #bf6f18;
+  --red: #c43f4d;
+  --violet: #6f57c6;
+  --cyan: #0097a7;
+  --coral: #f26b5e;
+  --sun: #ffd166;
+  --paper: #fffaf0;
+  --sky: #d9f4ff;
+  --shadow: 0 18px 45px rgba(16, 32, 51, 0.10);
+  --ink-line: 1px solid rgba(16, 32, 51, 0.22);
 }
 
 * {
@@ -19,7 +24,11 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    linear-gradient(135deg, rgba(217, 244, 255, 0.95) 0%, rgba(255, 250, 240, 0.82) 43%, rgba(255, 209, 102, 0.16) 100%),
+    repeating-linear-gradient(90deg, rgba(16, 32, 51, 0.035) 0 1px, transparent 1px 38px),
+    repeating-linear-gradient(0deg, rgba(16, 32, 51, 0.025) 0 1px, transparent 1px 34px),
+    var(--bg);
   color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   overflow-x: hidden;
@@ -143,16 +152,19 @@ button:disabled {
   justify-content: space-between;
   gap: 18px;
   padding: 22px 28px;
-  background: #111827;
-  color: #fff;
-  border-bottom: 4px solid #39d98a;
+  background:
+    linear-gradient(135deg, rgba(255, 253, 247, 0.98) 0%, rgba(217, 244, 255, 0.96) 54%, rgba(255, 225, 163, 0.92) 100%);
+  color: var(--ink);
+  border-bottom: 1px solid rgba(16, 32, 51, 0.22);
+  box-shadow: 0 14px 35px rgba(16, 32, 51, 0.08);
 }
 
 .topbar h1 {
   margin: 2px 0 0;
-  font-size: 34px;
+  font-size: 38px;
   line-height: 1;
   letter-spacing: 0;
+  font-weight: 950;
 }
 
 .top-actions {
@@ -180,9 +192,9 @@ button:disabled {
 .workspace-tabs button,
 .workspace-summary {
   min-height: 64px;
-  border: 1px solid var(--line);
+  border: var(--ink-line);
   border-radius: 8px;
-  background: #fff;
+  background: rgba(255, 253, 247, 0.88);
   color: var(--ink);
   box-shadow: var(--shadow);
 }
@@ -197,9 +209,9 @@ button:disabled {
 }
 
 .workspace-tabs button.active {
-  color: #fff;
-  background: #172033;
-  border-color: #172033;
+  color: var(--ink);
+  background: linear-gradient(135deg, #fff1a8 0%, #85e7ef 100%);
+  border-color: rgba(16, 32, 51, 0.42);
 }
 
 .workspace-tabs button span {
@@ -214,7 +226,7 @@ button:disabled {
 }
 
 .workspace-tabs button.active small {
-  color: #cbd5e1;
+  color: #314158;
 }
 
 .workspace-summary {
@@ -243,7 +255,7 @@ button:disabled {
 
 .panel {
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: var(--ink-line);
   border-radius: 8px;
   box-shadow: var(--shadow);
   padding: 18px;
@@ -305,37 +317,48 @@ h3 {
   border-radius: 8px;
   padding: 0 14px;
   font-weight: 800;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.primary:hover,
+.secondary:hover,
+.ghost:hover,
+.ghost-light:hover,
+.arc-button:hover {
+  transform: translateY(-1px);
 }
 
 .primary {
   color: white;
-  background: var(--blue);
+  background: #11243a;
+  box-shadow: 0 10px 24px rgba(17, 36, 58, 0.22);
 }
 
 .secondary {
-  color: white;
-  background: var(--green);
+  color: #09231f;
+  background: #8ee8d8;
+  border: 1px solid rgba(16, 32, 51, 0.18);
 }
 
 .ghost {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(16, 32, 51, 0.20);
 }
 
 .ghost-light {
   color: var(--ink);
-  background: #eef2f7;
-  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.58);
+  border: var(--ink-line);
 }
 
 .arc-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #083344;
-  background: #dff7ff;
-  border: 1px solid #b8e9f5;
+  color: #073344;
+  background: #dff9ff;
+  border: 1px solid #8ddfed;
   text-decoration: none;
 }
 
@@ -1293,35 +1316,48 @@ td em {
   border-radius: 8px;
   padding: 0 12px;
   color: var(--ink);
-  background: #eef2f7;
+  background: rgba(255, 253, 247, 0.72);
+  border: 1px solid rgba(16, 32, 51, 0.14);
   font-weight: 800;
 }
 
 .tabs button.active {
-  color: white;
-  background: var(--cyan);
+  color: #052f38;
+  background: #9eeaf1;
+  border-color: rgba(16, 32, 51, 0.24);
 }
 
 .input-row {
   display: grid;
-  grid-template-columns: 1fr 42px;
-  gap: 8px;
+  grid-template-columns: 1fr 34px;
+  gap: 6px;
   align-items: start;
 }
 
 .ai-help {
-  min-height: 42px;
+  min-height: 34px;
+  margin-top: 4px;
   border-radius: 8px;
-  color: white;
-  background: #172033;
+  color: rgba(16, 32, 51, 0.58);
+  background: rgba(255, 253, 247, 0.56);
+  border: 1px dashed rgba(16, 32, 51, 0.22);
+  font-size: 10px;
   font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.ai-help:hover,
+.ai-help:focus-visible {
+  color: #0b3340;
+  background: #e8fbff;
+  border-style: solid;
 }
 
 .instruction {
   display: block;
-  color: #2457d6;
-  background: #edf3ff;
-  border: 1px solid #c7d7ff;
+  color: #24515c;
+  background: #ecfeff;
+  border: 1px solid #9fe8f2;
   border-radius: 8px;
   padding: 8px;
   line-height: 1.35;
@@ -1339,9 +1375,11 @@ td em {
   gap: 18px;
   align-items: stretch;
   padding: 18px;
-  border: 1px solid #f59e0b;
+  border: 1px solid rgba(191, 111, 24, 0.36);
   border-radius: 8px;
-  background: #fffbeb;
+  background:
+    linear-gradient(135deg, rgba(255, 246, 215, 0.92), rgba(225, 250, 255, 0.88)),
+    var(--paper);
 }
 
 .tryon-copy {
@@ -1399,7 +1437,7 @@ td em {
 }
 
 .tryon-status {
-  color: #9a3412;
+  color: #8a3a17;
   font-weight: 750;
 }
 
@@ -1486,11 +1524,13 @@ td em {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  border: 1px solid var(--line);
+  border: var(--ink-line);
   border-radius: 8px;
   padding: 14px 16px;
-  background: #111827;
-  color: #fff;
+  background:
+    linear-gradient(135deg, #102033 0%, #12364c 44%, #22515c 100%);
+  color: #fffdf7;
+  box-shadow: 0 16px 34px rgba(16, 32, 51, 0.16);
 }
 
 .commerce-banner span,
@@ -1507,7 +1547,7 @@ td em {
 }
 
 .commerce-banner small {
-  color: #cbd5e1;
+  color: #cfeef1;
   font-weight: 700;
 }
 
@@ -1523,10 +1563,11 @@ td em {
 .service-brief {
   display: grid;
   gap: 12px;
-  border: 1px solid var(--line);
+  border: var(--ink-line);
   border-radius: 8px;
   padding: 14px;
-  background: #fbfcff;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 247, 0.94), rgba(232, 251, 255, 0.55));
 }
 
 .ai-fields {
@@ -1550,10 +1591,10 @@ td em {
 .scope-list {
   display: grid;
   gap: 6px;
-  border: 1px solid #cfe6d9;
+  border: 1px solid rgba(12, 143, 119, 0.22);
   border-radius: 8px;
   padding: 12px;
-  background: #f1fbf6;
+  background: #eefbf7;
 }
 
 .mini-cart span,
@@ -1582,10 +1623,12 @@ td em {
   grid-template-columns: minmax(0, 0.95fr) minmax(300px, 1.05fr);
   gap: 18px;
   align-items: center;
-  border: 1px solid var(--line);
+  border: var(--ink-line);
   border-radius: 8px;
   padding: 18px;
-  background: #f8fafc;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 240, 0.98) 0%, rgba(232, 251, 255, 0.86) 62%, rgba(255, 209, 102, 0.22) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.52);
 }
 
 .shop-hero h3 {
@@ -1654,10 +1697,17 @@ td em {
 }
 
 .shop-product {
-  border: 1px solid var(--line);
+  border: var(--ink-line);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: rgba(255, 253, 247, 0.96);
+  box-shadow: 0 12px 26px rgba(16, 32, 51, 0.08);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.shop-product:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(16, 32, 51, 0.13);
 }
 
 .product-media {
@@ -1689,17 +1739,20 @@ td em {
 
 .store-badge.good {
   color: #063d2d;
-  background: #d8f8e8;
+  background: #c8f6e7;
+  border: 1px solid rgba(6, 61, 45, 0.16);
 }
 
 .store-badge.review {
   color: #6b3b00;
-  background: #fff1cc;
+  background: #ffe6a8;
+  border: 1px solid rgba(107, 59, 0, 0.18);
 }
 
 .store-badge.blocked {
   color: #7a1118;
   background: #ffe0e3;
+  border: 1px solid rgba(122, 17, 24, 0.18);
 }
 
 .shop-product-body {
@@ -1717,8 +1770,8 @@ td em {
 
 .view-offer-button.active {
   color: #07405f;
-  border-color: #67e8f9;
-  background: #ecfeff;
+  border-color: #34dce8;
+  background: #dcfbff;
 }
 
 .put-on-button {
@@ -1726,9 +1779,9 @@ td em {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #fff7ed;
-  color: #9a3412;
-  border-color: #f59e0b;
+  background: #fff2d1;
+  color: #8a3a17;
+  border-color: #f1a53a;
 }
 
 .put-on-button.loading {

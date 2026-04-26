@@ -271,9 +271,10 @@ export async function runAiProviderSelfTest() {
   };
 }
 
-export async function generateProductImageAsset(offer, mode = "mock") {
+export async function generateProductImageAsset(offer, mode = "mock", options = {}) {
   const env = shoprailsEnv();
-  const provider = mode === "gemini" || mode === "real" ? "gemini" : "mock";
+  const provider = mode === "gemini" || mode === "real" || mode === "gemini-force" ? "gemini" : "mock";
+  const force = Boolean(options.force) || mode === "gemini-force";
   await mkdir(GENERATED_DIR, { recursive: true });
 
   if (provider === "mock") {
@@ -300,16 +301,24 @@ export async function generateProductImageAsset(offer, mode = "mock") {
 
   const fileName = `${safeFileName(offer.id)}-${safeFileName(env.imageModel)}.png`;
   const path = join(GENERATED_DIR, fileName);
+  const categoryDirection = {
+    sushi: "Show appetizing real sushi, servingware, and delivery-ready presentation. No fantasy characters.",
+    drinks: "Show realistic beverage, dessert, or serving accessories in a clean office dinner setup. No text overlays.",
+    props: "Show office-safe pirate party props as tasteful retail products. No real weapons, no threatening scene.",
+    costumes: "Show costume products as retail merchandise on mannequins, hangers, tables, or clean product displays. No faces unless generic mannequin.",
+    assistant: "Show a real adult human event setup assistant or service professional in an office/event-prep context. No robots, androids, armor, helmets, fantasy bodies, or sci-fi character portraits."
+  }[offer.category] || "Show the product clearly as a realistic retail listing.";
   const prompt = [
     "Create a polished 16:9 product card image for a hackathon demo storefront.",
     "No text overlays, no logos, no credit card visuals.",
     `Product: ${offer.name}.`,
     `Category: ${offer.category}.`,
     `Context: ${offer.reason}.`,
-    "Style: crisp commercial product photography, bright studio lighting, realistic but demo-friendly."
+    categoryDirection,
+    "Style direction: premium e-commerce product photography with an airy speculative-retail set, clean ink-like contour detail, pale sky and warm saffron/coral accents, crisp studio lighting, realistic scale, and an intuitive production-store feel."
   ].join(" ");
 
-  if (existsSync(path)) {
+  if (existsSync(path) && !force) {
     return {
       offerId: offer.id,
       provider,
