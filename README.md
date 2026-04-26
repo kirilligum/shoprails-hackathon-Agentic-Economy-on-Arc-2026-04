@@ -14,6 +14,10 @@ Distributed demo workers:
 
 ShopRails lets AI agents pay seller and scorer APIs with sub-cent USDC nanopayments, then make direct Arc USDC purchases after buyer policy approval.
 
+## Demo Video
+
+[![ShopRails demo video](https://img.youtube.com/vi/DUKOzDAe75U/maxresdefault.jpg)](https://youtu.be/DUKOzDAe75U)
+
 ## Why ShopRails
 
 ### Problem
