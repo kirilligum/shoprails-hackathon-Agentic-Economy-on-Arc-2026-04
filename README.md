@@ -40,9 +40,10 @@ ShopRails is a three-agent system transacting onchain:
 
 ### How To Use
 
-1. Get funds into USDC.
-2. Ask your agent to shop.
-3. Chat with the cart and approve the shopping-list items that need clarification.
+1. Get funds into USDC, then use the Wallet tab to add funds, draft withdrawals, and review the Arc address.
+2. Set buyer-side spend controls: daily amount, per-seller caps, blocked sellers, always-review categories, and scorer thresholds.
+3. Ask your agent to shop.
+4. Chat with the cart and approve the shopping-list items that need clarification.
 
 New demo proof: the Costume Store includes a Nano Banana virtual try-on. Click the photo button, click `Put on`, and the hosted Worker generates the try-on image while creating four fresh Circle Wallets Arc nano transactions at `0.000001 USDC` each.
 
@@ -54,7 +55,9 @@ Cloudflare is the primary demo and production-like surface. The hosted Worker ex
 
 ![ShopRails client checkout chat with escrow release state](docs/screenshots/shoprails-client-checkout.png)
 
-![ShopRails wallet and nanopayment analytics](docs/screenshots/shoprails-wallet-nanopayments.png)
+![ShopRails wallet funding, withdrawal, direct Arc payments, and separated nano lanes](docs/screenshots/shoprails-wallet-nanopayments.png)
+
+![ShopRails scorer policy setup with daily limits, per-seller caps, and blacklist controls](docs/screenshots/shoprails-wallet-policy-controls.png)
 
 ![ShopRails agent-readable merchant storefronts](docs/screenshots/shoprails-agent-readable-stores.png)
 
@@ -71,25 +74,26 @@ The buyer already has an Arc USDC wallet and asks an agent:
 ShopRails turns that request into atomic commerce actions:
 
 1. The agent decomposes the mission into sushi delivery, serving supplies, costumes, props, and setup labor.
-2. Seller API calls are paid through Circle x402/Gateway nanopayments.
-3. TrustRails, an independent scorer worker, is paid per item risk check.
-4. Merchant pages remain human-visible, but every field also includes agent-readable metadata and AI help buttons.
-5. In the Costume Store, the buyer loads `kirill_standing.jpg` and clicks `Put on`; this creates paid catalog, availability, scorer, and visualization nano actions.
-6. Trusted, low-risk items become Buy It Now.
-7. Costume and human-assistant purchases wait for buyer review.
-8. A blacklisted merchant offer is declined before any transaction is signed.
-9. The buyer reviews the cart, chats "confirm all reviewed items", and direct Arc USDC payments go to seller wallets.
-10. The proof panel links the real Circle Wallets transaction, x402 transfer, Arc transaction proof, virtual try-on nano txs, and a 50-transaction Arc frequency burst.
+2. The buyer can adjust wallet policy before the run: daily budget, per-seller daily caps, blacklisted sellers, category caps, and scorer risk cutoffs.
+3. Seller API calls are paid through Circle x402/Gateway nanopayments.
+4. TrustRails, an independent scorer worker, is paid per item risk check.
+5. Merchant pages remain human-visible, but every field and action button also includes agent-readable metadata and AII instructions.
+6. In the Costume Store, the buyer loads `kirill_standing.jpg` and clicks `Put on`; this creates paid catalog, availability, scorer, and visualization nano actions.
+7. Trusted, low-risk items become Buy It Now.
+8. Costume and human-assistant purchases wait for buyer review.
+9. A blacklisted merchant offer is declined before any transaction is signed.
+10. The buyer reviews the cart, chats "confirm all reviewed items", and direct Arc USDC payments go to seller wallets.
+11. The proof panel links the real Circle Wallets transaction, x402 transfer, Arc transaction proof, virtual try-on nano txs, and a 50-transaction Arc frequency burst.
 
 ## Impact
 
-Agents are blocked from entering card numbers for good reasons: cards are broad, revocable credentials with weak per-intent controls. ShopRails replaces that with programmable USDC payment rails where the buyer can set budgets, per-category caps, whitelist and blacklist rules, risk thresholds, review stages, and escrow release requirements.
+Agents are blocked from entering card numbers for good reasons: cards are broad, revocable credentials with weak per-intent controls. ShopRails replaces that with programmable USDC payment rails where the buyer can add funds, draft withdrawals, set daily spend limits, per-seller caps, per-category caps, whitelist and blacklist rules, risk thresholds, review stages, and scorer inputs before money moves.
 
 For merchants and API sellers, this also unlocks sub-cent pricing. A catalog query can cost `0.00042 USDC`, and a transaction-frequency demo can run 50 onchain actions at `0.000001 USDC` each. That model fails on card rails because fixed fees dominate the revenue, but it becomes viable with Arc's USDC-native settlement and Circle's agent-friendly infrastructure.
 
 ## System Architecture
 
-ShopRails is one buyer-facing web app plus three deployed service workers: a buyer server, a seller server, and an independent TrustRails scorer. The UI has five demo surfaces: agent activity/proof log, wallet and nanopayment analytics, client checkout chat, scorer checks, and three mini merchant stores for sushi delivery, pirate costumes, and human assistant services.
+ShopRails is one buyer-facing web app plus three deployed service workers: a buyer server, a seller server, and an independent TrustRails scorer. The UI has five demo surfaces: agent activity/proof log, wallet funding and nanopayment analytics, client checkout chat, scorer checks, and three mini merchant stores for sushi delivery, pirate costumes, and human assistant services. The Wallet tab is also the policy setup surface for controls the scorer uses later: daily limits, per-seller limits, blacklists, allowlists, review thresholds, and category caps.
 
 ```mermaid
 flowchart TD
@@ -245,9 +249,10 @@ The safest hackathon path is click-only:
 1. Click `Run full demo` or `Run perfect hackathon demo`.
 2. Point to the Judge proof panel.
 3. Open the Circle Wallets ArcScan tx, x402 transfer proof, escrow contract, and 50+ Arc tx proof if asked.
-4. Open `Stores > Costume Store`, click `Load Kirill photo`, then click `Put on`.
-5. Open `Wallet` and point to the highlighted Virtual try-on nano transactions.
-6. Use the prefilled cart chat, `confirm all reviewed items`, to show review release.
+4. Open `Wallet` and point to `Add funds`, `Withdraw funds`, daily spend limits, seller caps, and blacklist controls.
+5. Open `Stores > Costume Store`, click `Load Kirill photo`, then click `Put on`.
+6. Return to `Wallet` and point to the highlighted virtual try-on nano transactions.
+7. Use the prefilled cart chat, `confirm all reviewed items`, to show review release.
 
 Useful commands:
 
