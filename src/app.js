@@ -7,10 +7,10 @@ import {
 import { DecisionStage, formatUsdc, getMerchant } from "./policy.js";
 
 let state = createInitialState();
-let activeWorkspaceTab = "mission";
+let activeWorkspaceTab = "cart";
 let activeStore = "sushi";
 let activeInstruction = null;
-let chatDraft = "confirm all reviewed items";
+let chatDraft = state.mission.prompt;
 let liveStatus = "";
 let imageStatus = "";
 let aiTestStatus = null;
@@ -68,23 +68,29 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function renderChatText(value) {
+  const linked = escapeHtml(value).replace(
+    /https:\/\/testnet\.arcscan\.app\/tx\/0x[a-fA-F0-9]+/g,
+    (url) => `<a href="${url}" target="_blank" rel="noreferrer">${url}</a>`
+  );
+  return linked;
+}
+
+function addChatLine(from, text) {
+  state.chat.push({ from, text, at: new Date().toISOString() });
+}
+
+function isMissionRequest(message) {
+  return /organize|setup|sushi dinner|pirate theme|hire a human assistant|order sushi/i.test(message)
+    && /sushi|dinner|friends|mindsdb/i.test(message);
+}
+
 function recentArcTx() {
-  const records = [...state.orders, ...state.reviewCart];
-  const links = [];
-
-  for (const item of records) {
-    if (item.txHash) {
-      links.push({
-        label: item.stage === DecisionStage.BUY_NOW ? "Latest buy-now tx" : "Latest escrow tx",
-        hash: item.txHash
-      });
-    }
-    if (item.releaseTxHash) {
-      links.push({ label: "Latest review payment tx", hash: item.releaseTxHash });
-    }
-  }
-
-  return links.at(-1) || {
+  const latest = collectArcTransactions()[0];
+  return latest?.hash ? {
+    label: latest.label,
+    hash: latest.hash
+  } : {
     label: "Real funding tx",
     hash: state.wallet.fundingTxHash
   };
@@ -116,98 +122,163 @@ function renderTxLinks(item) {
 }
 
 function collectArcTransactions() {
-  const transactions = [
-    {
+  const transactions = [];
+  const seen = new Set();
+
+  function pushTx(tx) {
+    if (!tx.hash || seen.has(tx.hash)) return;
+    seen.add(tx.hash);
+    transactions.push({
+      ...tx,
+      href: arcTxUrl(tx.hash),
+      sortKey: Number(tx.blockNumber || tx.sortKey || 0)
+    });
+  }
+
+  pushTx({
       id: "funding",
       label: "Circle faucet funding",
       amount: state.wallet.onchainBalance,
-      href: arcTxUrl(state.wallet.fundingTxHash),
-      status: "confirmed"
-    }
-  ];
+      hash: state.wallet.fundingTxHash,
+      blockNumber: state.wallet.fundingBlockNumber,
+      status: "confirmed",
+      source: "faucet",
+      counterparty: "Circle faucet"
+  });
 
   for (const item of [...state.orders, ...state.reviewCart]) {
     if (item.txHash) {
-      transactions.push({
+      pushTx({
         id: `${item.id}-submit`,
         label: `${item.offerName} ${item.stage === DecisionStage.BUY_NOW ? "USDC transfer" : "escrow create"}`,
         amount: Number(item.onchainAmount || item.amount),
-        href: arcTxUrl(item.txHash),
-        status: `${item.escrowStatus} on Arc`
+        hash: item.txHash,
+        blockNumber: item.onchainBlockNumber,
+        status: `${item.escrowStatus} on Arc`,
+        source: item.stage === DecisionStage.BUY_NOW ? "buy-now" : "escrow",
+        counterparty: item.merchantName || item.merchantWallet
       });
     }
     if (item.releaseTxHash) {
-      transactions.push({
+      pushTx({
         id: `${item.id}-release`,
         label: `${item.offerName} escrow release`,
         amount: Number(item.onchainAmount || item.amount),
-        href: arcTxUrl(item.releaseTxHash),
-        status: "released on Arc"
+        hash: item.releaseTxHash,
+        blockNumber: item.onchainBlockNumber,
+        status: "released on Arc",
+        source: "escrow release",
+        counterparty: item.merchantName || item.merchantWallet
       });
     }
   }
 
   const escrow = state.proofs?.escrow;
   if (escrow?.deployTxHash) {
-    transactions.push({
+    pushTx({
       id: "escrow-deploy",
       label: "ShopRails escrow deploy",
       amount: 0,
-      href: arcTxUrl(escrow.deployTxHash),
-      status: "real contract deploy"
+      hash: escrow.deployTxHash,
+      blockNumber: escrow.deployBlockNumber,
+      status: "real contract deploy",
+      source: "contract",
+      counterparty: escrow.contractAddress
     });
   }
   for (const flow of escrow?.flows || []) {
     if (flow.createTxHash) {
-      transactions.push({
+      pushTx({
         id: `${flow.offerId}-escrow-create`,
         label: `${flow.offerName} escrow create`,
         amount: Number(flow.amountUsdc || 0),
-        href: arcTxUrl(flow.createTxHash),
-        status: `escrow #${flow.escrowId} held on contract`
+        hash: flow.createTxHash,
+        blockNumber: flow.createBlockNumber,
+        status: `escrow #${flow.escrowId} held on contract`,
+        source: "escrow",
+        counterparty: flow.sellerName || flow.seller
       });
     }
     if (flow.releaseTxHash) {
-      transactions.push({
+      pushTx({
         id: `${flow.offerId}-escrow-release`,
         label: `${flow.offerName} escrow release`,
         amount: Number(flow.amountUsdc || 0),
-        href: arcTxUrl(flow.releaseTxHash),
-        status: "released by reviewer"
+        hash: flow.releaseTxHash,
+        blockNumber: flow.releaseBlockNumber,
+        status: "released by reviewer",
+        source: "escrow release",
+        counterparty: flow.sellerName || flow.seller
       });
     }
     if (flow.refundTxHash) {
-      transactions.push({
+      pushTx({
         id: `${flow.offerId}-escrow-refund`,
         label: `${flow.offerName} escrow refund`,
         amount: Number(flow.amountUsdc || 0),
-        href: arcTxUrl(flow.refundTxHash),
-        status: "refunded by reviewer"
+        hash: flow.refundTxHash,
+        blockNumber: flow.refundBlockNumber,
+        status: "refunded by reviewer",
+        source: "refund",
+        counterparty: flow.sellerName || flow.seller
       });
     }
   }
 
   const nano = state.proofs?.nanopayment;
   if (nano?.deposit?.approvalTxHash) {
-    transactions.push({
+    pushTx({
       id: "gateway-approval",
       label: "Gateway approval for x402",
       amount: Number(nano.deposit.amount || 0),
-      href: arcTxUrl(nano.deposit.approvalTxHash),
-      status: "real Arc approval"
+      hash: nano.deposit.approvalTxHash,
+      blockNumber: nano.deposit.approvalBlockNumber,
+      status: "real Arc approval",
+      source: "Circle Gateway",
+      counterparty: "GatewayWalletBatched"
     });
   }
   if (nano?.deposit?.depositTxHash) {
-    transactions.push({
+    pushTx({
       id: "gateway-deposit",
       label: "Gateway deposit for x402",
       amount: Number(nano.deposit.amount || 0),
-      href: arcTxUrl(nano.deposit.depositTxHash),
-      status: "real Circle Gateway deposit"
+      hash: nano.deposit.depositTxHash,
+      blockNumber: nano.deposit.depositBlockNumber,
+      status: "real Circle Gateway deposit",
+      source: "Circle Gateway",
+      counterparty: "x402 catalog funding"
     });
   }
 
-  return transactions;
+  const circle = state.proofs?.circleWallets;
+  if (circle?.payment?.txHash) {
+    pushTx({
+      id: "circle-wallets-payment",
+      label: "Circle Wallets API seller payment",
+      amount: Number(circle.payment.amount || 0),
+      hash: circle.payment.txHash,
+      status: circle.payment.status || "Circle Wallets transfer",
+      source: "Circle Wallets",
+      counterparty: "Sushi Harbor seller wallet",
+      sortKey: 39030000
+    });
+  }
+
+  for (const tx of state.proofs?.frequency?.transactions || []) {
+    pushTx({
+      id: tx.actionId,
+      label: `50-action burst ${tx.actionId}`,
+      amount: Number(tx.amountUsdc || 0),
+      hash: tx.txHash,
+      blockNumber: tx.blockNumber,
+      status: `${tx.status}; ${tx.latencyMs} ms`,
+      source: "Arc microtransaction burst",
+      counterparty: tx.seller
+    });
+  }
+
+  return transactions.sort((a, b) => b.sortKey - a.sortKey);
 }
 
 function collectSimulatedTransactions() {
@@ -231,6 +302,28 @@ function collectSimulatedTransactions() {
     }
   }
   return rows;
+}
+
+function nanoStats() {
+  const simulatedTotal = state.nanopayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const realAmount = Number(state.proofs?.nanopayment?.payment?.formattedAmount || 0);
+  const count = state.nanopayments.length + (realAmount ? 1 : 0);
+  const total = simulatedTotal + realAmount;
+  const average = count ? total / count : 0;
+  const cardFeeMultiple = average ? 0.3 / average : 0;
+  return {
+    count,
+    simulatedCount: state.nanopayments.length,
+    simulatedTotal,
+    realAmount,
+    total,
+    average,
+    cardFeeMultiple,
+    realTransfer: state.proofs?.nanopayment?.payment?.transaction || "",
+    realTransferUrl: state.proofs?.nanopayment?.payment?.transferProofUrl || "",
+    scheme: state.proofs?.nanopayment?.data?.x402?.scheme || "GatewayWalletBatched",
+    facilitator: state.proofs?.nanopayment?.data?.x402?.facilitator || "Circle Gateway x402"
+  };
 }
 
 function merchantOffers(merchantId) {
@@ -374,6 +467,7 @@ function renderShell() {
           ${metric("Settled", state.wallet.spent)}
           ${metric("x402 data", state.wallet.nanopaymentSpent, 6)}
         </div>
+        ${renderNanoAnalytics()}
         <div class="rail-stack">
           <div><b>Circle Wallets</b><span>${state.arc.walletChainCode} developer wallet</span></div>
           <div><b>Buyer address</b><span><a href="${arcAddressUrl(state.wallet.buyerAddress)}" target="_blank" rel="noreferrer">${shortAddress(state.wallet.buyerAddress)}</a></span></div>
@@ -627,12 +721,13 @@ function renderTransactionLedger() {
   return `
     <div class="ledger">
       <div class="ledger-col">
-        <h3>Real Arc transactions</h3>
+        <h3>Real Arc transactions (${arcTransactions.length}, newest first)</h3>
         ${arcTransactions.map((tx) => `
           <a class="ledger-row" href="${tx.href}" target="_blank" rel="noreferrer">
             <span>${tx.label}</span>
             <b>${formatDisplayUsdc(tx.amount)}</b>
-            <small>${tx.status}</small>
+            <small><strong>Block ${tx.blockNumber || "pending"}</strong> · ${tx.source || "Arc"} · ${tx.counterparty || "counterparty"}</small>
+            <small><code>${shortAddress(tx.hash)}</code> · ${tx.status}</small>
           </a>
         `).join("")}
         ${simulatedTransactions.length ? `<h3>Simulated ShopRails settlements</h3>` : ""}
@@ -660,6 +755,32 @@ function renderTransactionLedger() {
             <small>${payment.request}</small>
           </a>
         `).join("") : `<p class="empty log-empty">Run the mission to create x402 receipt links.</p>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderNanoAnalytics() {
+  const stats = nanoStats();
+  return `
+    <div class="nano-analytics">
+      <div class="section-head compact-head">
+        <div>
+          <h3>Nanopayment analytics</h3>
+          <p>Per-action pricing for agent catalog/API calls.</p>
+        </div>
+        ${stats.realTransferUrl ? `<a class="tx-link inline-link" href="${stats.realTransferUrl}" target="_blank" rel="noreferrer">real x402 transfer</a>` : ""}
+      </div>
+      <div class="nano-grid">
+        <div><span>Paid data actions</span><b>${stats.count}</b><small>${stats.simulatedCount} simulated receipts + ${stats.realAmount ? 1 : 0} real x402</small></div>
+        <div><span>Real x402 amount</span><b>${stats.realAmount.toFixed(6)} USDC</b><small>${stats.realTransfer || "run full demo"}</small></div>
+        <div><span>Total data spend</span><b>${stats.total.toFixed(6)} USDC</b><small>avg ${stats.average.toFixed(6)} USDC/action</small></div>
+        <div><span>Card fee breakage</span><b>${stats.cardFeeMultiple ? `${Math.round(stats.cardFeeMultiple)}x` : "n/a"}</b><small>0.30 USD fixed fee vs avg action price</small></div>
+      </div>
+      <div class="nano-query-strip">
+        ${atomicQueries.map((query) => `
+          <span><b>${query.category}</b>${query.x402Price.toFixed(6)} USDC</span>
+        `).join("")}
       </div>
     </div>
   `;
@@ -738,12 +859,12 @@ function renderChat() {
         ${state.chat.slice(-4).map((message) => `
           <div class="message ${message.from === "Buyer" ? "buyer" : ""}">
             <span>${message.from}</span>
-            <p>${message.text}</p>
+            <p>${renderChatText(message.text)}</p>
           </div>
         `).join("")}
       </div>
       <form class="chat-form" data-action="chat">
-        <input name="message" value="${chatDraft}" placeholder="confirm all reviewed items" autocomplete="off" data-ai-description="Buyer review command input. Confirming releases all escrowed Arc USDC transactions.">
+        <textarea name="message" placeholder="Ask ShopRails to plan, explain, or confirm reviewed items" autocomplete="off" data-ai-description="Buyer command input. The mission prompt starts the agent shopping plan; explain summarizes the cart; confirm releases escrowed Arc USDC transactions.">${escapeHtml(chatDraft)}</textarea>
         <button class="primary" type="submit">Send</button>
       </form>
     </div>
@@ -788,6 +909,72 @@ function renderStore() {
   `;
 }
 
+async function runMissionFromUi({ sourceMessage = "", keepTab = "mission" } = {}) {
+  const cachedProofs = state.proofs;
+  const buyerMessage = sourceMessage.trim();
+  activeWorkspaceTab = keepTab;
+  state = createInitialState();
+  state.proofs = { ...state.proofs, ...cachedProofs };
+  if (buyerMessage) addChatLine("Buyer", buyerMessage);
+  chatDraft = "explain the cart";
+  liveStatus = `Running ${llmMode === "gemini" ? "Gemini" : "mock"} LLM calls and loading verified Arc transactions at price / 100,000.`;
+  renderShell();
+
+  try {
+    await fetch("/api/demo/reset", { method: "POST" });
+    const response = await fetch("/api/demo/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ llmMode })
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      throw new Error(payload.error || "Demo run failed");
+    }
+    state = payload.state;
+    state.proofs = { ...state.proofs, ...cachedProofs };
+    if (buyerMessage) addChatLine("Buyer", buyerMessage);
+    addChatLine(
+      "Shopping Cart",
+      `Agent plan complete. ${state.orders.length} item(s) are Buy It Now, ${state.reviewCart.length} item(s) are in review escrow, and ${state.declined.length} item(s) were declined before signing.`
+    );
+    chatDraft = "explain the cart";
+    liveStatus = `${llmMode === "gemini" ? "Gemini" : "Mock"} LLM calls logged. Verified Arc transaction links are loaded at price / 100,000.`;
+  } catch (error) {
+    state = createInitialState();
+    state.proofs = { ...state.proofs, ...cachedProofs };
+    if (buyerMessage) addChatLine("Buyer", buyerMessage);
+    runDemoMission(state);
+    addChatLine("Shopping Cart", `Agent plan complete using deterministic fallback calls. ${state.reviewCart.length} item(s) need review escrow.`);
+    chatDraft = "explain the cart";
+    liveStatus = `Server LLM route was unavailable (${error.message}); fell back to deterministic mock calls.`;
+  }
+  activeWorkspaceTab = keepTab;
+  renderShell();
+}
+
+async function submitCartCommand(message) {
+  const trimmed = message.trim();
+  if (!trimmed) return;
+
+  if (isMissionRequest(trimmed)) {
+    await runMissionFromUi({ sourceMessage: trimmed, keepTab: "cart" });
+    return;
+  }
+
+  activeWorkspaceTab = "cart";
+  reviewChat(state, { message: trimmed });
+  if (/why|explain|reason/i.test(trimmed)) {
+    chatDraft = "confirm all reviewed items";
+  } else if (/confirm all reviewed items/i.test(trimmed)) {
+    chatDraft = "show me the Arc transactions";
+    liveStatus = "Review escrow released. The cart chat includes clickable ArcScan transaction URLs.";
+  } else {
+    chatDraft = "confirm all reviewed items";
+  }
+  renderShell();
+}
+
 function bindEvents() {
   app.querySelectorAll("[data-workspace-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -801,7 +988,7 @@ function bindEvents() {
       llmMode = "gemini";
       activeWorkspaceTab = "mission";
       state = createInitialState();
-      chatDraft = "confirm all reviewed items";
+      chatDraft = "show me the Arc transactions";
       aiTestStatus = null;
       imageStatus = "";
       liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc escrow proof, and cart release.";
@@ -819,6 +1006,7 @@ function bindEvents() {
         state = payload.state;
         state.proofs = payload.proofs;
         reviewChat(state, { message: "confirm all reviewed items" });
+        chatDraft = "show me the Arc transactions";
         liveStatus = "Perfect demo loaded: real Gemini, real Nano Banana, real Circle x402 transfer, real Circle Wallets transfer, real Arc escrow contract links, cart released.";
       } catch (error) {
         liveStatus = `Full demo failed: ${error.message}`;
@@ -829,30 +1017,7 @@ function bindEvents() {
 
   app.querySelectorAll("[data-action='run-demo']").forEach((button) => {
     button.addEventListener("click", async () => {
-      activeWorkspaceTab = "mission";
-      state = createInitialState();
-      chatDraft = "confirm all reviewed items";
-      liveStatus = `Running ${llmMode === "gemini" ? "Gemini" : "mock"} LLM calls and loading verified Arc transactions at price / 100,000.`;
-      renderShell();
-      try {
-        await fetch("/api/demo/reset", { method: "POST" });
-        const response = await fetch("/api/demo/run", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ llmMode })
-        });
-        const payload = await response.json();
-        if (!response.ok || payload.error) {
-          throw new Error(payload.error || "Demo run failed");
-        }
-        state = payload.state;
-        liveStatus = `${llmMode === "gemini" ? "Gemini" : "Mock"} LLM calls logged. Verified Arc transaction links are loaded at price / 100,000.`;
-      } catch (error) {
-        state = createInitialState();
-        runDemoMission(state);
-        liveStatus = `Server LLM route was unavailable (${error.message}); fell back to deterministic mock calls.`;
-      }
-      renderShell();
+      await runMissionFromUi({ sourceMessage: state.mission.prompt, keepTab: "mission" });
     });
   });
 
@@ -864,9 +1029,9 @@ function bindEvents() {
 
   app.querySelector("[data-action='reset']").addEventListener("click", () => {
     state = createInitialState();
-    activeWorkspaceTab = "mission";
+    activeWorkspaceTab = "cart";
     activeInstruction = null;
-    chatDraft = "confirm all reviewed items";
+    chatDraft = state.mission.prompt;
     liveStatus = "";
     imageStatus = "";
     aiTestStatus = null;
@@ -875,26 +1040,19 @@ function bindEvents() {
 
   app.querySelectorAll("[data-action='confirm-reviewed']").forEach((button) => {
     button.addEventListener("click", async () => {
-      chatDraft = "confirm all reviewed items";
-      liveStatus = "Loaded verified buyer-approved review payments at price / 100,000.";
-      reviewChat(state, { message: chatDraft });
-      renderShell();
+      await submitCartCommand("confirm all reviewed items");
     });
   });
 
   app.querySelectorAll("[data-action='explain-reviewed']").forEach((button) => {
-    button.addEventListener("click", () => {
-      chatDraft = "why did you choose these items?";
-      reviewChat(state, { message: chatDraft });
-      renderShell();
+    button.addEventListener("click", async () => {
+      await submitCartCommand("explain the cart");
     });
   });
 
   const approve = app.querySelector("[data-action='approve-all']");
   approve?.addEventListener("click", () => {
-    chatDraft = "confirm all reviewed items";
-    reviewChat(state, { message: "confirm all reviewed items" });
-    renderShell();
+    submitCartCommand("confirm all reviewed items");
   });
 
   app.querySelectorAll("[data-store]").forEach((button) => {
@@ -978,12 +1136,10 @@ function bindEvents() {
     });
   });
 
-  app.querySelector(".chat-form")?.addEventListener("submit", (event) => {
+  app.querySelector(".chat-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    chatDraft = String(form.get("message") || "confirm all reviewed items");
-    reviewChat(state, { message: chatDraft });
-    renderShell();
+    await submitCartCommand(String(form.get("message") || state.mission.prompt));
   });
 
   app.querySelectorAll("[data-policy]").forEach((input) => {

@@ -24,6 +24,10 @@ function demoSettlementId(...parts) {
   return `demo-${fakeHash(...parts).slice(2, 12)}`;
 }
 
+function arcTxUrl(txHash) {
+  return `${ARC_CONFIG.explorerUrl}/tx/${txHash}`;
+}
+
 function logTool(state, name, input, output) {
   state.toolLog.unshift({
     id: `log-${state.toolLog.length + 1}`,
@@ -160,7 +164,7 @@ export function createInitialState() {
     chat: [
       {
         from: "ShopRails",
-        text: "Review items held in escrow. Type 'confirm all reviewed items' to release them on Arc.",
+        text: "Send the prefilled request to start the agent shopping plan. After review, ask for an explanation or type 'confirm all reviewed items' to release escrow.",
         at: nowIso()
       }
     ],
@@ -355,10 +359,23 @@ export function reviewChat(state, input) {
   if (/confirm all reviewed items/i.test(message)) {
     const result = reviewApprove(state, {});
     state.mission.status = "completed";
-    reply = `Confirmed ${result.approved.length} escrowed item(s). Circle Wallets submitted Arc USDC release transactions to sellers.`;
+    if (!result.approved.length) {
+      reply = "No reviewed items remain in escrow. The cart is already released or nothing has been reviewed yet.";
+    } else {
+      const txLines = result.approved.flatMap((item) => [
+        item.txHash ? `${item.offerName} escrow create: ${arcTxUrl(item.txHash)}` : "",
+        item.releaseTxHash ? `${item.offerName} release: ${arcTxUrl(item.releaseTxHash)}` : ""
+      ]).filter(Boolean);
+      reply = [
+        `Confirmed ${result.approved.length} escrowed item(s). Circle Wallets submitted Arc USDC release transactions to sellers.`,
+        "ArcScan transactions:",
+        ...txLines
+      ].join("\n");
+    }
   } else if (/why|explain|reason/i.test(message)) {
-    reply = state.reviewCart.length
-      ? state.reviewCart.map((item) => `${item.offerName}: ${item.agentReason}`).join(" ")
+    const rows = state.reviewCart.length ? state.reviewCart : [...state.orders, ...state.declined];
+    reply = rows.length
+      ? rows.map((item) => `${item.offerName}: ${item.agentReason}`).join("\n")
       : "No items are waiting for review.";
   } else {
     reply = "I can release reviewed items, explain why each item was chosen, or keep funds in escrow.";
