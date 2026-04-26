@@ -17,6 +17,7 @@ let tryOnStatus = "";
 let aiTestStatus = null;
 let activeOfferId = null;
 let loadingTryOnOfferId = "";
+let activeZoomImage = null;
 let llmMode = "gemini";
 let imageMode = "gemini";
 let llmConfig = null;
@@ -77,6 +78,37 @@ function renderChatText(value) {
     (url) => `<a href="${url}" target="_blank" rel="noreferrer">${url}</a>`
   );
   return linked;
+}
+
+function renderZoomImage(src, alt, className = "") {
+  const safeSrc = escapeHtml(src);
+  const safeAlt = escapeHtml(alt);
+  return `
+    <button
+      class="image-zoom-button ${className}"
+      type="button"
+      data-action="zoom-image"
+      data-zoom-src="${safeSrc}"
+      data-zoom-alt="${safeAlt}"
+      aria-label="Open larger image: ${safeAlt}"
+    >
+      <img src="${safeSrc}" alt="${safeAlt}">
+      <span class="zoom-cue">Zoom</span>
+    </button>
+  `;
+}
+
+function renderImageLightbox() {
+  if (!activeZoomImage) return "";
+  return `
+    <div class="image-lightbox" role="dialog" aria-modal="true" aria-label="Full screen product image">
+      <button class="lightbox-close" type="button" data-action="close-lightbox" aria-label="Close full screen image">Close</button>
+      <figure class="lightbox-card">
+        <img src="${escapeHtml(activeZoomImage.src)}" alt="${escapeHtml(activeZoomImage.alt)}">
+        <figcaption>${escapeHtml(activeZoomImage.alt)}</figcaption>
+      </figure>
+    </div>
+  `;
 }
 
 function addChatLine(from, text) {
@@ -605,6 +637,7 @@ function renderShell() {
         ${renderStore()}
       </section>
     </main>
+    ${renderImageLightbox()}
   `;
 
   bindEvents();
@@ -1227,13 +1260,13 @@ function renderCostumeTryOnPanel(costumeOffers) {
       <div class="tryon-stage">
         <figure>
           ${hasPhoto
-            ? `<img src="${state.tryOn.personImageUrl}" alt="Kirill standing reference photo for virtual try-on">`
+            ? renderZoomImage(state.tryOn.personImageUrl, "Kirill standing reference photo for virtual try-on", "tryon-zoom-image")
             : `<div class="tryon-placeholder">Reference photo</div>`}
           <figcaption>Reference photo</figcaption>
         </figure>
         <figure>
           ${latest?.image?.url
-            ? `<img src="${latest.image.url}" alt="${selected} virtual try-on generated image">`
+            ? renderZoomImage(latest.image.url, `${selected} virtual try-on generated image`, "tryon-zoom-image")
             : `<div class="tryon-placeholder">Generated try-on</div>`}
           <figcaption>${selected}</figcaption>
         </figure>
@@ -1294,7 +1327,7 @@ function renderOfferDetailsPanel(store, merchant, offer, isCostumeStore) {
   return `
     <section class="offer-details-panel" data-shoprails-offer-id="${offer.id}" data-ai-description="Expanded offer details for agent review. Includes seller, delivery window, policy state, scorer risk, and paid API endpoints.">
       <div class="offer-detail-media">
-        <img src="${offer.image}" alt="${offer.name} expanded product image">
+        ${renderZoomImage(offer.image, `${offer.name} expanded product image`, "offer-zoom-image")}
         <span class="store-badge ${badge.className}">${badge.label}</span>
       </div>
       <div class="offer-detail-body">
@@ -1375,7 +1408,7 @@ function renderCommerceStore(store, merchant, offers) {
                 <button class="ghost-light" type="button">Compare policy</button>
               </div>
             </div>
-            ${heroOffer ? `<img src="${heroOffer.image}" alt="${heroOffer.name} featured product image">` : ""}
+            ${heroOffer ? renderZoomImage(heroOffer.image, `${heroOffer.name} featured product image`, "hero-zoom-image") : ""}
           </div>
           <div class="commerce-toolbar">
             <div>
@@ -1394,7 +1427,7 @@ function renderCommerceStore(store, merchant, offers) {
               return `
                 <article class="shop-product" data-shoprails-offer-id="${offer.id}" data-ai-description="${offer.reason}">
                   <div class="product-media">
-                    <img src="${offer.image}" alt="${offer.name} product preview">
+                    ${renderZoomImage(offer.image, `${offer.name} product preview`, "product-zoom-image")}
                     <span class="store-badge ${badge.className}">${badge.label}</span>
                   </div>
                   <div class="shop-product-body">
@@ -1471,7 +1504,7 @@ function renderAssistantMarketplace(store, merchant, offers) {
           </div>
           ${offers.map((offer) => `
             <article class="pro-card" data-shoprails-offer-id="${offer.id}" data-ai-description="${offer.reason}">
-              <img src="${offer.image}" alt="${offer.name} profile photo">
+              ${renderZoomImage(offer.image, `${offer.name} profile photo`, "profile-zoom-image")}
               <div class="pro-main">
                 <div class="pro-title">
                   <div>
@@ -1608,6 +1641,7 @@ function bindEvents() {
       liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc transaction proof, and reviewed cart approval.";
       activeOfferId = null;
       loadingTryOnOfferId = "";
+      activeZoomImage = null;
       renderShell();
       try {
         const response = await fetch("/api/demo/full", {
@@ -1654,6 +1688,7 @@ function bindEvents() {
     aiTestStatus = null;
     activeOfferId = null;
     loadingTryOnOfferId = "";
+    activeZoomImage = null;
     renderShell();
   });
 
@@ -1694,6 +1729,25 @@ function bindEvents() {
   app.querySelector("[data-action='close-offer']")?.addEventListener("click", () => {
     activeOfferId = null;
     renderShell();
+  });
+
+  app.querySelectorAll("[data-action='zoom-image']").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeZoomImage = {
+        src: button.dataset.zoomSrc,
+        alt: button.dataset.zoomAlt || "Product image"
+      };
+      renderShell();
+    });
+  });
+
+  app.querySelector(".image-lightbox")?.addEventListener("click", (event) => {
+    const clickedBackdrop = event.target === event.currentTarget;
+    const clickedClose = Boolean(event.target.closest("[data-action='close-lightbox']"));
+    if (clickedBackdrop || clickedClose) {
+      activeZoomImage = null;
+      renderShell();
+    }
   });
 
   app.querySelector("[data-action='load-tryon-photo']")?.addEventListener("click", () => {
@@ -1824,6 +1878,13 @@ function bindEvents() {
       state.policy.autoApproveByCategory[input.dataset.policy] = Number(input.value);
     });
   });
+
+  document.onkeydown = (event) => {
+    if (event.key === "Escape" && activeZoomImage) {
+      activeZoomImage = null;
+      renderShell();
+    }
+  };
 }
 
 async function settleItemsOnArc(items, kind) {
