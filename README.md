@@ -10,7 +10,7 @@ Distributed demo workers:
 - Seller server: [https://shoprails-seller-server.kirill-igum.workers.dev](https://shoprails-seller-server.kirill-igum.workers.dev)
 - Scorer server: [https://shoprails-scorer-server.kirill-igum.workers.dev](https://shoprails-scorer-server.kirill-igum.workers.dev)
 
-![ShopRails cover](docs/screenshots/shoprails-cover.png)
+![ShopRails cover](shoprailscover1.png)
 
 ShopRails lets AI agents pay seller and scorer APIs with sub-cent USDC nanopayments, then make direct Arc USDC purchases after buyer policy approval.
 
@@ -278,7 +278,7 @@ Technology and category tags:
 
 Cover image:
 
-`docs/screenshots/shoprails-cover.png`
+`shoprailscover1.png`
 
 Video presentation:
 
