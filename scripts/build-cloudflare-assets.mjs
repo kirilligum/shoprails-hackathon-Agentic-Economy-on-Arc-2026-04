@@ -27,7 +27,7 @@ await mkdir(dist, { recursive: true });
 
 await copyFile("index.html", join(dist, "index.html"));
 
-for (const file of ["app.js", "styles.css", "data.js", "policy.js", "shoprails-tools.js"]) {
+for (const file of ["app.js", "styles.css", "data.js", "policy.js", "scorer.js", "shoprails-tools.js"]) {
   await copyFile(join("src", file), join(dist, "src", file));
 }
 

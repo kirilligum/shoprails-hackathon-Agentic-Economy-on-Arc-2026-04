@@ -54,30 +54,46 @@ test("total budget exceeded declines before signing", () => {
   assert.match(decision.reasons.join(" "), /available wallet balance/);
 });
 
-test("demo mission produces buy-now, review, declined, and nanopayment records", () => {
+test("demo mission produces buy-now, review, declined, and scorer nanopayment records", () => {
   const state = createInitialState();
   const result = runDemoMission(state);
 
   assert.equal(result.autoBought, 3);
   assert.equal(result.reviewItems, 2);
   assert.equal(result.declined, 1);
-  assert.equal(state.nanopayments.length, 5);
+  assert.equal(state.nanopayments.length, 11);
+  assert.equal(state.scorer.checks.length, 6);
+  assert.equal(state.nanopayments.filter((payment) => payment.kind === "scorer_api").length, 6);
   assert.ok(state.wallet.nanopaymentSpent > 0);
   assert.ok(state.decisions.some((decision) => decision.stage === DecisionStage.DECLINE_BLACKLISTED));
 });
 
-test("review chat confirmation releases all escrowed purchases", () => {
+test("scorer nanopayments are far smaller than purchase prices", () => {
+  const state = createInitialState();
+  runDemoMission(state);
+
+  const smallestPurchase = Math.min(...state.catalog.map((offer) => offer.price));
+  const largestScorerPayment = Math.max(...state.nanopayments
+    .filter((payment) => payment.kind === "scorer_api")
+    .map((payment) => payment.amount));
+
+  assert.ok(smallestPurchase / largestScorerPayment >= 10000);
+});
+
+test("review chat confirmation approves all reviewed purchases", () => {
   const state = createInitialState();
   runDemoMission(state);
 
   assert.equal(state.reviewCart.length, 2);
   assert.equal(state.wallet.escrowed, 155);
+  assert.equal(state.wallet.available, 260);
 
   const response = reviewChat(state, { message: "confirm all reviewed items" });
 
   assert.match(response.reply, /Confirmed 2/);
   assert.equal(state.reviewCart.length, 0);
   assert.equal(state.wallet.escrowed, 0);
+  assert.equal(state.wallet.available, 105);
   assert.equal(state.wallet.spent, 395);
 });
 

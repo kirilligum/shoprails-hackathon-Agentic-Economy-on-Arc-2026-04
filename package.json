@@ -12,7 +12,11 @@
     "arc:frequency": "node scripts/run-arc-frequency-demo.mjs",
     "demo:capture": "node scripts/capture-demo.mjs",
     "cloudflare:build": "node scripts/build-cloudflare-assets.mjs",
-    "cloudflare:deploy": "npm run cloudflare:build && wrangler deploy"
+    "cloudflare:deploy": "npm run cloudflare:build && wrangler deploy",
+    "cloudflare:deploy:buyer": "wrangler deploy --config wrangler.buyer.jsonc",
+    "cloudflare:deploy:seller": "wrangler deploy --config wrangler.seller.jsonc",
+    "cloudflare:deploy:scorer": "wrangler deploy --config wrangler.scorer.jsonc",
+    "cloudflare:deploy:services": "npm run cloudflare:deploy:buyer && npm run cloudflare:deploy:seller && npm run cloudflare:deploy:scorer"
   },
   "keywords": [
     "shoprails",

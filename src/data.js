@@ -233,6 +233,75 @@ export const demoWallets = {
   }
 };
 
+export const buyerServer = {
+  id: "buyer-server",
+  name: "Maya's Buyer Server",
+  domain: "buyer.shoprails.demo",
+  workerUrl: "https://shoprails-buyer-server.kirill-igum.workers.dev",
+  endpoint: "/api/buyer/intent",
+  role: "Holds buyer policy, purchase history, and signed payment authority.",
+  wallet: demoWallets.buyer.address
+};
+
+export const sellerServers = [
+  {
+    id: "sushi-seller-server",
+    merchantId: "sushi-harbor",
+    name: "Sushi Harbor Seller Server",
+    workerUrl: "https://shoprails-seller-server.kirill-igum.workers.dev",
+    endpoint: "/api/seller/sushi/quote",
+    paidEndpoints: ["catalog.search", "product.detail", "availability", "quote"]
+  },
+  {
+    id: "costume-seller-server",
+    merchantId: "sevenseas-costumes",
+    name: "Seven Seas Seller Server",
+    workerUrl: "https://shoprails-seller-server.kirill-igum.workers.dev",
+    endpoint: "/api/seller/costumes/quote",
+    paidEndpoints: ["catalog.search", "availability", "quote", "visualize"]
+  },
+  {
+    id: "assistant-seller-server",
+    merchantId: "taskdock",
+    name: "TaskDock Seller Server",
+    workerUrl: "https://shoprails-seller-server.kirill-igum.workers.dev",
+    endpoint: "/api/seller/assistant/quote",
+    paidEndpoints: ["services.search", "availability", "quote", "brief.validate"]
+  }
+];
+
+export const scorerServer = {
+  id: "trustrails-scorer",
+  name: "TrustRails Scorer",
+  domain: "trustrails.scorer.demo",
+  workerUrl: "https://shoprails-scorer-server.kirill-igum.workers.dev",
+  endpoint: "/api/scorer/evaluate",
+  wallet: "0x40000000000000000000000000000000000000D4",
+  priceUsdc: money(0.000006),
+  role: "Independent reputation API that scores buyer history, seller trust, item risk, and policy fit."
+};
+
+export const buyerProfile = {
+  id: "buyer-maya-chen",
+  name: "Maya Chen",
+  wallet: demoWallets.buyer.address,
+  successfulOrders: 38,
+  chargebacks: 0,
+  averageOrderUsdc: 72,
+  categoryHistory: {
+    sushi: { orders: 5, averageUsdc: 160, refundRate: 0 },
+    drinks: { orders: 9, averageUsdc: 28, refundRate: 0 },
+    props: { orders: 12, averageUsdc: 26, refundRate: 0.01 },
+    costumes: { orders: 3, averageUsdc: 68, refundRate: 0 },
+    assistant: { orders: 4, averageUsdc: 82, refundRate: 0 }
+  },
+  merchantHistory: {
+    "sushi-harbor.shoprails.demo": { successfulOrders: 3, lastOrderDaysAgo: 11 },
+    "sevenseas-costumes.shoprails.demo": { successfulOrders: 2, lastOrderDaysAgo: 43 },
+    "taskdock.shoprails.demo": { successfulOrders: 1, lastOrderDaysAgo: 27 }
+  }
+};
+
 export const offers = [
   {
     id: "sushi-party-set",

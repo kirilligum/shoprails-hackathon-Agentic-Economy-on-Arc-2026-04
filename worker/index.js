@@ -1,5 +1,5 @@
 import { atomicQueries, offers } from "../src/data.js";
-import { createInitialState, getNanopaymentReceipt, reviewChat, runDemoMissionWithLlm } from "../src/shoprails-tools.js";
+import { createInitialState, getNanopaymentReceipt, reviewChat, runDemoMission, runDemoMissionWithLlm } from "../src/shoprails-tools.js";
 
 const TEXT_MODEL = "gemini-3.1-flash-lite-preview";
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
@@ -313,7 +313,9 @@ async function handleApi(request, env) {
 
   if (method === "GET" && url.pathname.startsWith("/api/receipts/nanopayment/")) {
     const paymentId = url.pathname.split("/").at(-1);
-    return json(getNanopaymentReceipt(paymentId));
+    const receiptState = createInitialState();
+    runDemoMission(receiptState);
+    return json(getNanopaymentReceipt(paymentId, receiptState));
   }
 
   if (method === "GET" && url.pathname === "/api/mcp/catalog.search") {

@@ -1,0 +1,6 @@
+{
+  "name": "shoprails-seller-server",
+  "main": "workers/seller.js",
+  "compatibility_date": "2026-04-26",
+  "workers_dev": true
+}

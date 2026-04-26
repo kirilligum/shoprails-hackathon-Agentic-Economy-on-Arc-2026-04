@@ -22,7 +22,7 @@ const app = document.querySelector("#app");
 function stageLabel(stage) {
   return {
     [DecisionStage.BUY_NOW]: "Buy It Now",
-    [DecisionStage.REVIEW_ESCROW]: "Review Escrow",
+    [DecisionStage.REVIEW_ESCROW]: "Review",
     [DecisionStage.DECLINE_BLACKLISTED]: "Blacklisted",
     [DecisionStage.DECLINE_POLICY]: "Declined"
   }[stage] || stage;
@@ -98,7 +98,7 @@ function recentArcTx() {
 function renderTxLinks(item) {
   const links = [];
   if (item.txHash) {
-    const label = item.stage === DecisionStage.BUY_NOW ? "Real Arc USDC transfer" : "Real escrow tx";
+    const label = item.stage === DecisionStage.BUY_NOW ? "Real Arc USDC transfer" : "Real Arc review tx";
     links.push(`<a class="tx-link" href="${arcTxUrl(item.txHash)}" target="_blank" rel="noreferrer">${label}</a>`);
   }
   if (item.releaseTxHash) {
@@ -108,7 +108,7 @@ function renderTxLinks(item) {
     links.push(`<small>Arc amount: ${item.onchainAmount} USDC</small>`);
   }
   if (item.liveEscrowId && item.liveEscrowContract) {
-    links.push(`<a class="tx-link" href="${arcAddressUrl(item.liveEscrowContract)}" target="_blank" rel="noreferrer">Escrow #${item.liveEscrowId} contract</a>`);
+    links.push(`<a class="tx-link" href="${arcAddressUrl(item.liveEscrowContract)}" target="_blank" rel="noreferrer">Review proof contract</a>`);
   }
   if (item.simulatedSettlementId) {
     links.push(`<small>Policy id: ${item.simulatedSettlementId}</small>`);
@@ -149,24 +149,24 @@ function collectArcTransactions() {
     if (item.txHash) {
       pushTx({
         id: `${item.id}-submit`,
-        label: `${item.offerName} ${item.stage === DecisionStage.BUY_NOW ? "USDC transfer" : "escrow create"}`,
+        label: `${item.offerName} ${item.stage === DecisionStage.BUY_NOW ? "USDC transfer" : "review authorization"}`,
         amount: Number(item.onchainAmount || item.amount),
         hash: item.txHash,
         blockNumber: item.onchainBlockNumber,
         status: `${item.escrowStatus} on Arc`,
-        source: item.stage === DecisionStage.BUY_NOW ? "buy-now" : "escrow",
+        source: item.stage === DecisionStage.BUY_NOW ? "buy-now" : "review",
         counterparty: item.merchantName || item.merchantWallet
       });
     }
     if (item.releaseTxHash) {
       pushTx({
         id: `${item.id}-release`,
-        label: `${item.offerName} escrow release`,
+        label: `${item.offerName} direct seller payment`,
         amount: Number(item.onchainAmount || item.amount),
         hash: item.releaseTxHash,
         blockNumber: item.onchainBlockNumber,
-        status: "released on Arc",
-        source: "escrow release",
+        status: "paid on Arc after review",
+        source: "review payment",
         counterparty: item.merchantName || item.merchantWallet
       });
     }
@@ -286,15 +286,15 @@ function collectSimulatedTransactions() {
     if (item.simulatedSettlementId) {
       rows.push({
         id: item.simulatedSettlementId,
-        label: `${item.offerName} ${item.stage === DecisionStage.BUY_NOW ? "policy decision" : "review hold decision"}`,
+        label: `${item.offerName} ${item.stage === DecisionStage.BUY_NOW ? "policy decision" : "review-required decision"}`,
         amount: item.amount,
-        status: item.txHash || item.releaseTxHash ? "backed by real Arc tx" : `${item.escrowStatus} · not submitted to Arc yet`
+        status: item.txHash || item.releaseTxHash ? "backed by real Arc tx" : `${item.escrowStatus} · direct payment not submitted yet`
       });
     }
     if (item.simulatedReleaseId) {
       rows.push({
         id: item.simulatedReleaseId,
-        label: `${item.offerName} buyer-approved review decision`,
+        label: `${item.offerName} buyer-approved direct payment`,
         amount: item.amount,
         status: item.releaseTxHash ? "backed by real Arc tx" : "not submitted to Arc yet"
       });
@@ -305,15 +305,27 @@ function collectSimulatedTransactions() {
 
 function nanoStats() {
   const simulatedTotal = state.nanopayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const sellerApi = state.nanopayments.filter((payment) => payment.kind !== "scorer_api");
+  const scorerApi = state.nanopayments.filter((payment) => payment.kind === "scorer_api");
+  const scorerTotal = scorerApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const sellerTotal = sellerApi.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const realAmount = Number(state.proofs?.nanopayment?.payment?.formattedAmount || 0);
   const count = state.nanopayments.length + (realAmount ? 1 : 0);
   const total = simulatedTotal + realAmount;
   const average = count ? total / count : 0;
   const cardFeeMultiple = average ? 0.3 / average : 0;
+  const cheapestPurchase = Math.min(...state.catalog.map((offer) => Number(offer.price || Infinity)));
+  const largestScorer = Math.max(...scorerApi.map((payment) => Number(payment.amount || 0)), 0);
+  const scorerPriceMultiple = largestScorer ? cheapestPurchase / largestScorer : 0;
   return {
     count,
     simulatedCount: state.nanopayments.length,
     simulatedTotal,
+    sellerApiCount: sellerApi.length,
+    sellerTotal,
+    scorerApiCount: scorerApi.length,
+    scorerTotal,
+    scorerPriceMultiple,
     realAmount,
     total,
     average,
@@ -345,6 +357,11 @@ function renderWorkspaceTabs({ autoBought, pendingReview, releasedReview, declin
       id: "cart",
       label: "Client",
       detail: `${pendingReview} pending, ${releasedReview} released`
+    },
+    {
+      id: "scorer",
+      label: "Scorer",
+      detail: `${state.scorer.checks.length} paid checks`
     },
     {
       id: "stores",
@@ -462,7 +479,7 @@ function renderShell() {
         <div class="wallet-grid">
           ${metric("Deposited", state.wallet.balance)}
           ${metric("On-chain", state.wallet.onchainBalance)}
-          ${metric("Escrow", state.wallet.escrowed)}
+          ${metric("Review pending", state.wallet.escrowed)}
           ${metric("Settled", state.wallet.spent)}
           ${metric("x402 data", state.wallet.nanopaymentSpent, 6)}
         </div>
@@ -471,10 +488,10 @@ function renderShell() {
           <div><b>Circle Wallets</b><span>${state.arc.walletChainCode} developer wallet</span></div>
           <div><b>Buyer address</b><span><a href="${arcAddressUrl(state.wallet.buyerAddress)}" target="_blank" rel="noreferrer">${shortAddress(state.wallet.buyerAddress)}</a></span></div>
           <div><b>Agent address</b><span><a href="${arcAddressUrl(state.wallet.agentAddress)}" target="_blank" rel="noreferrer">${shortAddress(state.wallet.agentAddress)}</a></span></div>
-          <div><b>Escrow address</b><span><a href="${arcAddressUrl(state.wallet.escrowAddress)}" target="_blank" rel="noreferrer">${shortAddress(state.wallet.escrowAddress)}</a></span></div>
+          <div><b>Scorer wallet</b><span><a href="${arcAddressUrl(state.architecture.scorerServer.wallet)}" target="_blank" rel="noreferrer">${shortAddress(state.architecture.scorerServer.wallet)}</a></span></div>
           <div><b>Arc Testnet</b><span>Chain ${state.arc.chainId}, gas paid in USDC</span></div>
           <div><b>Gateway</b><span>${state.arc.gatewaySupportedChainName}, domain ${state.arc.gatewayDomainId}</span></div>
-          <div><b>Nanopayments</b><span>x402 GatewayWalletBatched signatures</span></div>
+          <div><b>Nanopayments</b><span>Seller APIs + TrustRails scorer via x402</span></div>
           <div><b>Latest real Arc tx</b><span><a href="${arcTxUrl(latestTx.hash)}" target="_blank" rel="noreferrer">${latestTx.label}</a></span></div>
         </div>
         <div class="fund-box">
@@ -496,7 +513,7 @@ function renderShell() {
           ${Object.entries(state.policy.autoApproveByCategory).map(([category, value]) => `
             <label>
               <span>${category}</span>
-              <input type="number" value="${value}" min="0" data-policy="${category}" data-ai-description="Auto-buy limit for ${category} purchases before ShopRails routes the item to review escrow.">
+              <input type="number" value="${value}" min="0" data-policy="${category}" data-ai-description="Auto-buy limit for ${category} purchases before ShopRails routes the item to buyer review.">
             </label>
           `).join("")}
         </div>
@@ -510,12 +527,16 @@ function renderShell() {
           </div>
           <div class="cart-actions">
             <button class="ghost-light" data-action="explain-reviewed" ${state.decisions.length ? "" : "disabled"}>Explain choices</button>
-            <button class="secondary" data-action="confirm-reviewed" ${state.reviewCart.length ? "" : "disabled"}>Release escrow</button>
+            <button class="secondary" data-action="confirm-reviewed" ${state.reviewCart.length ? "" : "disabled"}>Approve reviewed</button>
           </div>
         </div>
         ${renderReviewTable()}
         ${renderFulfillment()}
         ${renderChat()}
+      </section>
+
+      <section class="panel tab-panel scorer-panel" ${tabPanelAttrs("scorer")}>
+        ${renderScorerPanel()}
       </section>
 
       <section class="panel tab-panel stores-panel" ${tabPanelAttrs("stores")}>
@@ -642,7 +663,7 @@ function renderProofPanel() {
         <button class="ghost-light" data-action="refresh-proofs">Refresh proofs</button>
       </div>
       <div class="proof-grid">
-        ${proofBadge(realEscrow ? "real" : "warn", "Real Arc escrow", realEscrow ? `contract ${shortAddress(escrow.contractAddress)} create/release/refund` : "not loaded yet", realEscrow ? arcAddressUrl(escrow.contractAddress) : "")}
+        ${proofBadge(realEscrow ? "real" : "warn", "Real Arc tx proof", realEscrow ? `contract ${shortAddress(escrow.contractAddress)} create/release/refund` : "not loaded yet", realEscrow ? arcAddressUrl(escrow.contractAddress) : "")}
         ${proofBadge(realNano ? "real" : "warn", "Real x402 nanopayment", realNano ? `${nano.payment.formattedAmount} USDC transfer ${nano.payment.transaction}` : "run full demo to load proof", nano?.payment?.transferProofUrl || "")}
         ${proofBadge(realFrequency ? "real" : "warn", "50+ Arc tx burst", realFrequency ? `${frequency.confirmedCount} txs at ${frequency.amountUsdc} USDC/action` : "run npm run arc:frequency", frequency?.sampleTxUrls?.[0] || "")}
         ${proofBadge(realGemini ? "real" : "warn", "Real Gemini call", realGemini ? ai.configuredText.model : "click Test AI providers", "")}
@@ -650,7 +671,7 @@ function renderProofPanel() {
         ${proofBadge("sim", "Simulated receipt ledger", "x402-style receipts for every atomic query", "")}
         ${proofBadge(circle.configured ? "real" : "sim", "Circle Wallets API", circleDetail, circle.payment?.txUrl || (circleAddress ? arcAddressUrl(circleAddress) : ""))}
       </div>
-      ${refundFlow ? `<small>Refund proof: <a href="${arcTxUrl(refundFlow.refundTxHash)}" target="_blank" rel="noreferrer">risk escrow refund tx</a></small>` : ""}
+      ${refundFlow ? `<small>Risk proof: <a href="${arcTxUrl(refundFlow.refundTxHash)}" target="_blank" rel="noreferrer">refund tx</a></small>` : ""}
     </div>
   `;
 }
@@ -658,14 +679,106 @@ function renderProofPanel() {
 function renderRiskStory() {
   return `
     <div class="risk-story">
-      <h3>Risk and reputation path</h3>
+      <h3>Decentralized risk path</h3>
       <div class="risk-flow">
-        <div><b>Rules v1</b><span>budget, caps, whitelist, blacklist</span></div>
-        <div><b>Reputation</b><span>seeded collaborative outlier score</span></div>
-        <div><b>Privacy future</b><span>ZK proof of normal buying pattern</span></div>
-        <div><b>Decision</b><span>buy now, review escrow, decline</span></div>
+        <div><b>Buyer server</b><span>policy and purchase history</span></div>
+        <div><b>Seller server</b><span>quote, wallet, product data</span></div>
+        <div><b>Scorer API</b><span>paid x402 risk score</span></div>
+        <div><b>Decision</b><span>buy now, review, decline</span></div>
       </div>
     </div>
+  `;
+}
+
+function renderScorerPanel() {
+  const checks = state.scorer.checks;
+  const stats = nanoStats();
+  const latestInput = state.scorer.latestInput;
+  const latestOutput = state.scorer.latestOutput;
+
+  return `
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Independent scorer</p>
+        <h2>${state.scorer.provider.name}</h2>
+      </div>
+      <span class="rail">${state.scorer.provider.priceUsdc.toFixed(6)} USDC/check</span>
+    </div>
+    <div class="scorer-architecture">
+      <article>
+        <span>Buyer server</span>
+        <b>${state.architecture.buyerServer.name}</b>
+        <p>${state.architecture.buyerServer.role}</p>
+        <a class="worker-link" href="${state.architecture.buyerServer.workerUrl}" target="_blank" rel="noreferrer">${state.architecture.buyerServer.workerUrl}</a>
+        <code>${state.architecture.buyerServer.endpoint}</code>
+      </article>
+      <article>
+        <span>Seller servers</span>
+        <b>${state.architecture.sellerServers.length} independent merchants</b>
+        <p>${state.architecture.sellerServers.map((server) => server.name).join(", ")}</p>
+        <a class="worker-link" href="${state.architecture.sellerServers[0]?.workerUrl}" target="_blank" rel="noreferrer">${state.architecture.sellerServers[0]?.workerUrl}</a>
+        <code>paid quote/catalog APIs</code>
+      </article>
+      <article>
+        <span>Scorer server</span>
+        <b>${state.architecture.scorerServer.domain}</b>
+        <p>${state.architecture.scorerServer.role}</p>
+        <a class="worker-link" href="${state.architecture.scorerServer.workerUrl}" target="_blank" rel="noreferrer">${state.architecture.scorerServer.workerUrl}</a>
+        <code>${state.architecture.scorerServer.endpoint}</code>
+      </article>
+    </div>
+    <div class="scorer-metrics">
+      ${metric("Paid scorer checks", checks.length, 0)}
+      ${metric("Scorer nano spend", stats.scorerTotal, 6)}
+      ${metric("Largest scorer call", state.scorer.provider.priceUsdc, 6)}
+      <div class="metric">
+        <span>Vs cheapest purchase</span>
+        <strong>${stats.scorerPriceMultiple ? `${Math.floor(stats.scorerPriceMultiple).toLocaleString()}x` : "n/a"}</strong>
+      </div>
+    </div>
+    <div class="scorer-note">
+      The buyer server sends buyer history, policy, item amount, and seller metadata to TrustRails. TrustRails returns a score and decision hint. Each scorer call is paid as its own Circle/x402 nanopayment and is more than 10,000x smaller than the final purchase prices in this demo.
+    </div>
+    ${checks.length ? `
+      <div class="table-wrap scorer-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Seller</th>
+              <th>Score</th>
+              <th>Decision</th>
+              <th>Scorer nanopayment</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${checks.map((check) => `
+              <tr>
+                <td><b>${check.offerName}</b><span>${check.amount.toFixed(2)} USDC purchase</span></td>
+                <td><b>${check.merchantName}</b><span>${check.domain}</span></td>
+                <td><b>${check.approvalScore}/100</b><span>risk ${check.riskScore}/100</span></td>
+                <td><span class="pill ${decisionClass(check.decision)}">${stageLabel(check.decision)}</span><small>${check.reasons[0]}</small></td>
+                <td>
+                  <a class="tx-link" href="${nanoReceiptUrl(check.nanopayment.id)}" target="_blank" rel="noreferrer">${check.nanopayment.id}</a>
+                  <span>${check.nanopayment.amount.toFixed(6)} USDC</span>
+                  <small>${check.nanopayment.endpoint}</small>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="scorer-payload">
+        <article>
+          <b>Latest scorer input</b>
+          <pre>${escapeHtml(JSON.stringify(latestInput, null, 2))}</pre>
+        </article>
+        <article>
+          <b>Latest scorer output</b>
+          <pre>${escapeHtml(JSON.stringify(latestOutput, null, 2))}</pre>
+        </article>
+      </div>
+    ` : `<p class="empty table-empty">Run the agent mission to call the TrustRails scorer for each candidate item.</p>`}
   `;
 }
 
@@ -687,12 +800,12 @@ function renderFulfillment() {
     },
     {
       label: "Costumes and props",
-      status: released.some((item) => item.category === "costumes") ? "escrow released, packed" : "review needed",
+      status: released.some((item) => item.category === "costumes") ? "paid after review, packed" : "review needed",
       detail: "One-size accessories plus cheap pirate table props."
     },
     {
       label: "Assistant Maya",
-      status: released.some((item) => item.category === "assistant") ? "escrow released, accepted" : "review needed",
+      status: released.some((item) => item.category === "assistant") ? "paid after review, accepted" : "review needed",
       detail: "Receives deliveries, unpacks, stages table, texts photos."
     }
   ];
@@ -765,20 +878,23 @@ function renderNanoAnalytics() {
       <div class="section-head compact-head">
         <div>
           <h3>Nanopayment analytics</h3>
-          <p>Per-action pricing for agent catalog/API calls.</p>
+          <p>Per-action pricing for seller APIs and independent scorer calls.</p>
         </div>
         ${stats.realTransferUrl ? `<a class="tx-link inline-link" href="${stats.realTransferUrl}" target="_blank" rel="noreferrer">real x402 transfer</a>` : ""}
       </div>
       <div class="nano-grid">
         <div><span>Paid data actions</span><b>${stats.count}</b><small>${stats.simulatedCount} simulated receipts + ${stats.realAmount ? 1 : 0} real x402</small></div>
-        <div><span>Real x402 amount</span><b>${stats.realAmount.toFixed(6)} USDC</b><small>${stats.realTransfer || "run full demo"}</small></div>
+        <div><span>Seller API nano</span><b>${stats.sellerTotal.toFixed(6)} USDC</b><small>${stats.sellerApiCount} catalog/quote/discovery calls</small></div>
+        <div><span>Scorer nano</span><b>${stats.scorerTotal.toFixed(6)} USDC</b><small>${stats.scorerApiCount} TrustRails calls; ${stats.scorerPriceMultiple ? `${Math.floor(stats.scorerPriceMultiple).toLocaleString()}x` : "n/a"} under cheapest purchase</small></div>
         <div><span>Total data spend</span><b>${stats.total.toFixed(6)} USDC</b><small>avg ${stats.average.toFixed(6)} USDC/action</small></div>
+        <div><span>Real x402 amount</span><b>${stats.realAmount.toFixed(6)} USDC</b><small>${stats.realTransfer || "run full demo"}</small></div>
         <div><span>Card fee breakage</span><b>${stats.cardFeeMultiple ? `${Math.round(stats.cardFeeMultiple)}x` : "n/a"}</b><small>0.30 USD fixed fee vs avg action price</small></div>
       </div>
       <div class="nano-query-strip">
         ${atomicQueries.map((query) => `
           <span><b>${query.category}</b>${query.x402Price.toFixed(6)} USDC</span>
         `).join("")}
+        <span><b>scorer</b>${state.scorer.provider.priceUsdc.toFixed(6)} USDC/check</span>
       </div>
     </div>
   `;
@@ -797,7 +913,7 @@ function cartReferenceAnswer(message = "explain the cart") {
   }
 
   return [
-    `${state.orders.length} item(s) are already Buy It Now, ${state.reviewCart.length} item(s) are in review escrow, and ${state.declined.length} item(s) were declined.`,
+    `${state.orders.length} item(s) are already Buy It Now, ${state.reviewCart.length} item(s) are waiting for buyer review, and ${state.declined.length} item(s) were declined.`,
     ...rows.map((item) => `${item.offerName}: ${item.agentReason}`)
   ].join("\n");
 }
@@ -823,9 +939,9 @@ function cartChatPrompt(message) {
     `Buyer message: ${message}`,
     `Mission: ${state.mission.prompt}`,
     `Mission status: ${state.mission.status}`,
-    `Wallet: ${formatDisplayUsdc(state.wallet.available)} available, ${formatDisplayUsdc(state.wallet.escrowed)} escrowed, ${formatDisplayUsdc(state.wallet.spent)} spent`,
+    `Wallet: ${formatDisplayUsdc(state.wallet.available)} available, ${formatDisplayUsdc(state.wallet.escrowed)} pending review, ${formatDisplayUsdc(state.wallet.spent)} spent`,
     `Buy-now items: ${state.orders.filter((item) => item.stage === DecisionStage.BUY_NOW).map((item) => `${item.offerName} (${item.onchainAmount || item.amount} USDC on Arc)`).join("; ") || "none"}`,
-    `Review escrow items: ${state.reviewCart.map((item) => `${item.offerName} (${item.agentReason})`).join("; ") || "none"}`,
+    `Review items: ${state.reviewCart.map((item) => `${item.offerName} (${item.agentReason})`).join("; ") || "none"}`,
     `Declined items: ${state.declined.map((item) => `${item.offerName} (${item.reasons[0]})`).join("; ") || "none"}`,
     `Rows available to explain: ${rows.map((item) => `${item.offerName}: ${item.agentReason}; decision=${stageLabel(item.stage)}; status=${item.escrowStatus}; risk=${item.reasons[0]}`).join(" | ") || "none"}`,
     `Arc transactions: ${cartTransactionLines().join(" | ") || "none yet"}`,
@@ -914,6 +1030,7 @@ function renderReviewTable() {
             <th>Seller</th>
             <th>Amount</th>
             <th>Decision</th>
+            <th>Scorer</th>
             <th>Why</th>
           </tr>
         </thead>
@@ -931,6 +1048,11 @@ function renderReviewTable() {
               </td>
               <td>${formatUsdc(item.amount)}</td>
               <td><span class="pill ${decisionClass(item.stage)}">${stageLabel(item.stage)}</span><small>${item.escrowStatus}</small>${renderTxLinks(item)}</td>
+              <td>
+                <b>${item.scorerScore ?? "n/a"}/100</b>
+                ${item.scorerPaymentId ? `<a class="tx-link" href="${nanoReceiptUrl(item.scorerPaymentId)}" target="_blank" rel="noreferrer">${item.scorerPaymentId}</a>` : ""}
+                ${item.scorerRiskScore ? `<small>risk ${item.scorerRiskScore}/100</small>` : ""}
+              </td>
               <td>${item.agentReason}<em>${item.reasons[0]}</em></td>
             </tr>
           `).join("")}
@@ -952,7 +1074,7 @@ function renderChat() {
         `).join("")}
       </div>
       <form class="chat-form" data-action="chat">
-        <textarea name="message" placeholder="Ask ShopRails to plan, explain, or confirm reviewed items" autocomplete="off" data-ai-description="Buyer command input. The mission prompt starts the agent shopping plan; explain summarizes the cart; confirm releases escrowed Arc USDC transactions.">${escapeHtml(chatDraft)}</textarea>
+        <textarea name="message" placeholder="Ask ShopRails to plan, explain, or confirm reviewed items" autocomplete="off" data-ai-description="Buyer command input. The mission prompt starts the agent shopping plan; explain summarizes the cart; confirm approves reviewed direct Arc USDC transactions.">${escapeHtml(chatDraft)}</textarea>
         <button class="primary" type="submit">Send</button>
       </form>
     </div>
@@ -1108,7 +1230,7 @@ function renderAssistantMarketplace(store, merchant, offers) {
           <div class="review-required">
             <span>Buyer review required</span>
             <b>${formatUsdc(primary?.price || 0)}</b>
-            <small>Human labor always routes to escrow.</small>
+            <small>Human labor always routes to buyer review.</small>
           </div>
         </aside>
         <section class="pro-results">
@@ -1125,7 +1247,7 @@ function renderAssistantMarketplace(store, merchant, offers) {
                     <h4>${offer.name}</h4>
                     <p>${merchant.name} · ${merchant.domain}</p>
                   </div>
-                  <span class="store-badge review">Review escrow</span>
+                  <span class="store-badge review">Review</span>
                 </div>
                 <div class="pro-stats">
                   <span>${merchant.rating.toFixed(1)} rating</span>
@@ -1180,7 +1302,7 @@ async function runMissionFromUi({ sourceMessage = "", keepTab = "mission" } = {}
     if (buyerMessage) addChatLine("Buyer", buyerMessage);
     addChatLine(
       "Shopping Cart",
-      `Agent plan complete. ${state.orders.length} item(s) are Buy It Now, ${state.reviewCart.length} item(s) are in review escrow, and ${state.declined.length} item(s) were declined before signing.`
+      `Agent plan complete. ${state.orders.length} item(s) are Buy It Now, ${state.reviewCart.length} item(s) are waiting for buyer review, and ${state.declined.length} item(s) were declined before signing.`
     );
     chatDraft = "explain the cart";
     liveStatus = "Real Gemini LLM calls logged. Verified Arc transaction links are loaded at price / 100,000.";
@@ -1216,7 +1338,7 @@ async function submitCartCommand(message) {
   if (/confirm all reviewed items/i.test(trimmed)) {
     reviewChat(state, { message: trimmed });
     chatDraft = "show me the Arc transactions";
-    liveStatus = "Review escrow released. The cart chat includes clickable ArcScan transaction URLs.";
+    liveStatus = "Reviewed items approved. The cart chat includes clickable ArcScan transaction URLs.";
   } else if (/tx|transaction|arcscan|proof|link/i.test(trimmed)) {
     addChatLine("Buyer", trimmed);
     addChatLine("Shopping Cart", transactionChatReply());
@@ -1251,7 +1373,7 @@ function bindEvents() {
       chatDraft = "show me the Arc transactions";
       aiTestStatus = null;
       imageStatus = "";
-      liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc escrow proof, and cart release.";
+      liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc transaction proof, and reviewed cart approval.";
       renderShell();
       try {
         const response = await fetch("/api/demo/full", {
@@ -1267,7 +1389,7 @@ function bindEvents() {
         state.proofs = payload.proofs;
         reviewChat(state, { message: "confirm all reviewed items" });
         chatDraft = "show me the Arc transactions";
-        liveStatus = "Perfect demo loaded: real Gemini, real Nano Banana, real Circle x402 transfer, real Circle Wallets transfer, real Arc escrow contract links, cart released.";
+        liveStatus = "Perfect demo loaded: real Gemini, real Nano Banana, real Circle x402 transfer, real Circle Wallets transfer, real Arc transaction links, reviewed cart approved.";
       } catch (error) {
         liveStatus = `Full demo failed: ${error.message}`;
       }

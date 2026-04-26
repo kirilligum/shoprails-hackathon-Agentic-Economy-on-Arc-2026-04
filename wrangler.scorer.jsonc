@@ -1,0 +1,6 @@
+{
+  "name": "shoprails-scorer-server",
+  "main": "workers/scorer.js",
+  "compatibility_date": "2026-04-26",
+  "workers_dev": true
+}

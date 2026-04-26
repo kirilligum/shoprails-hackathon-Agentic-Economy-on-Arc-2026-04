@@ -77,7 +77,7 @@ button:disabled {
 
 .workspace-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
   gap: 10px;
   margin-bottom: 14px;
   align-items: stretch;
@@ -791,7 +791,7 @@ code {
 
 .nano-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
 }
 
@@ -850,6 +850,105 @@ code {
 
 .nano-query-strip b {
   color: var(--ink);
+}
+
+.scorer-architecture,
+.scorer-metrics,
+.scorer-payload {
+  display: grid;
+  gap: 10px;
+}
+
+.scorer-architecture {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.scorer-architecture article,
+.scorer-note,
+.scorer-payload article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.scorer-architecture article {
+  display: grid;
+  gap: 6px;
+}
+
+.scorer-architecture span,
+.scorer-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.scorer-architecture span {
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scorer-architecture p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.scorer-architecture code,
+.worker-link,
+.scorer-payload pre {
+  overflow-wrap: anywhere;
+}
+
+.worker-link {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.worker-link:hover {
+  text-decoration: underline;
+}
+
+.scorer-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.scorer-note {
+  margin-bottom: 12px;
+  background: #f7fdff;
+  border-color: #b8e9f5;
+}
+
+.scorer-table {
+  margin-bottom: 12px;
+}
+
+.scorer-payload {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scorer-payload b {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.scorer-payload pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  color: #263449;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 label {
@@ -1467,6 +1566,9 @@ td em {
   .nano-grid,
   .risk-flow,
   .fulfillment-grid,
+  .scorer-architecture,
+  .scorer-metrics,
+  .scorer-payload,
   .commerce-layout,
   .service-layout,
   .shop-hero {

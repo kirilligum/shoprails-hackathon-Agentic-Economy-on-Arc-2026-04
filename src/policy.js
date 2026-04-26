@@ -1,4 +1,5 @@
 import { defaultPolicy, merchants, offers } from "./data.js";
+import { scorePurchase, ScorerDecision } from "./scorer.js";
 
 export const DecisionStage = Object.freeze({
   BUY_NOW: "BUY_NOW",
@@ -38,8 +39,14 @@ export function createPolicyState(policy = defaultPolicy) {
   };
 }
 
-export function buildRiskSignals(offer, merchant, policy = defaultPolicy) {
+export function buildRiskSignals(offer, merchant, policy = defaultPolicy, scorerResult = null) {
   const signals = [
+    ...(scorerResult ? [{
+      code: "INDEPENDENT_SCORER",
+      label: "Independent scorer",
+      score: scorerResult.riskScore,
+      detail: `${scorerResult.provider} returned ${scorerResult.decisionLabel} with approval score ${scorerResult.approvalScore}/100.`
+    }] : []),
     {
       code: "MERCHANT_REPUTATION",
       label: "Merchant reputation",
@@ -93,7 +100,7 @@ export function buildRiskSignals(offer, merchant, policy = defaultPolicy) {
   return signals;
 }
 
-export function evaluatePurchase(intent, state) {
+export function evaluatePurchase(intent, state, scorerResult = null) {
   const offer = getOffer(intent.offerId, state.catalog);
   const merchant = getMerchant(offer.merchantId, state.merchants);
   const policy = state.policy;
@@ -102,12 +109,20 @@ export function evaluatePurchase(intent, state) {
   const spentWithMerchant = state.merchantSpend[merchant.id] || 0;
   const autoLimit = policy.autoApproveByCategory[offer.category] ?? 0;
   const categoryCap = policy.categoryCaps[offer.category] ?? policy.totalBudget;
-  const riskSignals = buildRiskSignals(offer, merchant, policy);
-  const maxRisk = Math.max(...riskSignals.map((signal) => signal.score), offer.riskScore);
+  const scorer = scorerResult || scorePurchase({
+    buyerProfile: state.buyerProfile,
+    policy,
+    offer,
+    merchant,
+    amount
+  });
+  const riskSignals = buildRiskSignals(offer, merchant, policy, scorer);
+  const maxRisk = Math.max(...riskSignals.map((signal) => signal.score), offer.riskScore, scorer.riskScore);
   const reasons = [];
 
-  if (policy.blacklistedDomains.includes(merchant.domain) || policy.blacklistedBrands.includes(offer.brand)) {
-    reasons.push("Seller or brand is blacklisted by buyer policy.");
+  if (scorer.decision === ScorerDecision.DECLINE_BLACKLISTED || policy.blacklistedDomains.includes(merchant.domain) || policy.blacklistedBrands.includes(offer.brand)) {
+    reasons.push("Independent scorer or buyer policy blocked the seller or brand.");
+    reasons.push(...scorer.reasons);
     return decisionResult(DecisionStage.DECLINE_BLACKLISTED, offer, merchant, amount, riskSignals, reasons);
   }
 
@@ -121,8 +136,9 @@ export function evaluatePurchase(intent, state) {
     return decisionResult(DecisionStage.DECLINE_POLICY, offer, merchant, amount, riskSignals, reasons);
   }
 
-  if (maxRisk >= policy.declineRiskScore) {
+  if (scorer.decision === ScorerDecision.DECLINE_POLICY || maxRisk >= policy.declineRiskScore) {
     reasons.push(`Risk score ${maxRisk} is above the decline threshold.`);
+    reasons.push(...scorer.reasons);
     return decisionResult(DecisionStage.DECLINE_POLICY, offer, merchant, amount, riskSignals, reasons);
   }
 
@@ -150,6 +166,11 @@ export function evaluatePurchase(intent, state) {
     reasons.push("Seller domain is outside the whitelist.");
   }
 
+  if (scorer.decision === ScorerDecision.REVIEW) {
+    reasons.push(`Independent scorer returned review with approval score ${scorer.approvalScore}/100.`);
+    reasons.push(...scorer.reasons);
+  }
+
   if (reasons.length) {
     return decisionResult(DecisionStage.REVIEW_ESCROW, offer, merchant, amount, riskSignals, reasons);
   }
@@ -160,8 +181,8 @@ export function evaluatePurchase(intent, state) {
 
 function decisionResult(stage, offer, merchant, amount, riskSignals, reasons) {
   const routeByStage = {
-    [DecisionStage.BUY_NOW]: "Circle Wallets transfer on Arc USDC",
-    [DecisionStage.REVIEW_ESCROW]: "Arc escrow contract, release after review",
+    [DecisionStage.BUY_NOW]: "Direct Arc USDC payment from buyer wallet to seller wallet",
+    [DecisionStage.REVIEW_ESCROW]: "Buyer review before direct Arc USDC seller payment",
     [DecisionStage.DECLINE_BLACKLISTED]: "Blocked before Circle signing",
     [DecisionStage.DECLINE_POLICY]: "Blocked before Circle signing"
   };

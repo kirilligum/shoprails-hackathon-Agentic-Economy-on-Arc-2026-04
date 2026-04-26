@@ -4,9 +4,15 @@
 
 **Hosted on Cloudflare Workers.** Judge login: `guest@guest.com` / `aS28ZVhk3upyMzPJY34dw`
 
+Distributed demo workers:
+
+- Buyer server: [https://shoprails-buyer-server.kirill-igum.workers.dev](https://shoprails-buyer-server.kirill-igum.workers.dev)
+- Seller server: [https://shoprails-seller-server.kirill-igum.workers.dev](https://shoprails-seller-server.kirill-igum.workers.dev)
+- Scorer server: [https://shoprails-scorer-server.kirill-igum.workers.dev](https://shoprails-scorer-server.kirill-igum.workers.dev)
+
 ![ShopRails cover](docs/screenshots/shoprails-cover.png)
 
-ShopRails lets AI agents buy real goods and services with USDC while buyer policy, risk scoring, Circle Nanopayments, Circle Wallets, and Arc escrow decide what settles now, what waits for review, and what gets declined.
+ShopRails lets AI agents pay seller and scorer APIs with sub-cent USDC nanopayments, then make direct Arc USDC purchases after buyer policy approval.
 
 ## Screenshots
 
@@ -20,24 +26,25 @@ ShopRails lets AI agents buy real goods and services with USDC while buyer polic
 
 ## Short Description
 
-Agent-native commerce guardrails for the Arc economy: LLMs can shop across merchant sites, but every purchase intent passes through spend limits, merchant trust policy, x402 per-action pricing, and USDC settlement on Arc.
+Decentralized agentic commerce guardrails for the Arc economy: LLMs can pay seller and reputation APIs with x402 nanopayments, but final seller payments are direct Arc USDC transfers after buyer policy and scorer approval.
 
 ## Customer Journey
 
-The buyer funds a ShopRails AI wallet with demo USDC and asks an agent:
+The buyer already has an Arc USDC wallet and asks an agent:
 
 > Organize and setup a sushi dinner for my friends on Friday, May 1, 2026. 10 people. 7 PM. At MindsDB office. Pirate theme. Order sushi, pirate one-size costumes, cheap props, and a human assistant.
 
 ShopRails turns that request into atomic commerce actions:
 
 1. The agent decomposes the mission into sushi delivery, serving supplies, costumes, props, and setup labor.
-2. A premium catalog lookup is paid through a real Circle x402/Gateway nanopayment.
-3. Merchant pages remain human-visible, but every field also includes agent-readable metadata and AI help buttons.
-4. Trusted, low-risk sushi and supply items become Buy It Now.
-5. Costume and human-assistant purchases go into review escrow.
-6. A blacklisted merchant offer is declined before any transaction is signed.
-7. The buyer reviews the cart, chats "confirm all reviewed items", and escrowed USDC releases to seller wallets.
-8. The proof panel links the real Circle Wallets transaction, x402 transfer, Arc escrow transactions, and a 50-transaction Arc frequency burst.
+2. Seller API calls are paid through Circle x402/Gateway nanopayments.
+3. TrustRails, an independent scorer worker, is paid per item risk check.
+4. Merchant pages remain human-visible, but every field also includes agent-readable metadata and AI help buttons.
+5. Trusted, low-risk items become Buy It Now.
+6. Costume and human-assistant purchases wait for buyer review.
+7. A blacklisted merchant offer is declined before any transaction is signed.
+8. The buyer reviews the cart, chats "confirm all reviewed items", and direct Arc USDC payments go to seller wallets.
+9. The proof panel links the real Circle Wallets transaction, x402 transfer, Arc transaction proof, and a 50-transaction Arc frequency burst.
 
 ## Impact
 
@@ -47,25 +54,27 @@ For merchants and API sellers, this also unlocks sub-cent pricing. A catalog que
 
 ## System Architecture
 
-ShopRails is one local web app with four demo surfaces: buyer wallet and policy console, client checkout chat, agent activity/proof log, and three mini merchant stores for sushi delivery, pirate costumes, and human assistant services.
+ShopRails is one buyer-facing web app plus three deployed service workers: a buyer server, a seller server, and an independent TrustRails scorer. The UI has five demo surfaces: agent activity/proof log, wallet and nanopayment analytics, client checkout chat, scorer checks, and three mini merchant stores for sushi delivery, pirate costumes, and human assistant services.
 
 ```mermaid
 flowchart LR
-  Buyer["Buyer"] --> Agent["OpenClaw / LLM agent"]
+  Buyer["Buyer"] --> BuyerServer["Buyer Worker: policy + history"]
+  BuyerServer --> Agent["OpenClaw / LLM agent"]
   Agent --> Tools["ShopRails MCP-style tools"]
-  Agent --> Browser["Agent-readable storefronts"]
-  Browser --> Metadata["data-ai-description, accessible labels, AI help"]
-  Tools --> Catalog["Catalog search and offer fetch"]
-  Catalog --> X402["Circle x402 / Gateway nanopayment"]
-  Tools --> Policy["Wallet policy and risk engine"]
+  Agent --> SellerWorker["Seller Worker: catalog + quote APIs"]
+  SellerWorker --> X402Seller["Circle x402 seller nanopayments"]
+  Agent --> ScorerWorker["TrustRails Scorer Worker"]
+  ScorerWorker --> X402Score["Circle x402 scorer nanopayments"]
+  SellerWorker --> Cart["Proposed cart"]
+  ScorerWorker --> Cart
+  Cart --> Policy["Buyer policy engine"]
   Policy --> BuyNow["BUY_NOW"]
-  Policy --> Review["REVIEW_ESCROW"]
+  Policy --> Review["REVIEW"]
   Policy --> Decline["DECLINE_BLACKLISTED"]
-  BuyNow --> ArcPay["Arc USDC transfer"]
-  Review --> Escrow["ShopRailsEscrow contract"]
-  Escrow --> Release["Buyer chat approval releases funds"]
+  Review --> Approval["Buyer chat approval"]
+  BuyNow --> ArcPay["Direct Arc USDC seller payment"]
+  Approval --> ArcPay
   ArcPay --> Sellers["Merchant wallets"]
-  Release --> Sellers
   Decline --> Audit["Audit log"]
 ```
 
@@ -76,13 +85,16 @@ Core objects:
 - `Policy`
 - `RiskSignal`
 - `CheckoutDecision`
-- `EscrowTransaction`
+- `ScorerCheck`
+- `NanopaymentAction`
+- `DirectSellerPayment`
 
 MCP-style tool surface:
 
 - `wallet.get_balance`
 - `catalog.search`
 - `merchant.get_offer`
+- `scorer.evaluate`
 - `checkout.evaluate`
 - `checkout.submit`
 - `review.list`

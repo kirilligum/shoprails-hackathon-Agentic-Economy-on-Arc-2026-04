@@ -1,5 +1,6 @@
-import { ARC_CONFIG, atomicQueries, demoIntents, defaultPolicy, demoWallets, merchants, offers, verifiedDemoTransactions, verifiedFunding } from "./data.js";
+import { ARC_CONFIG, atomicQueries, buyerProfile, buyerServer, demoIntents, defaultPolicy, demoWallets, merchants, offers, scorerServer, sellerServers, verifiedDemoTransactions, verifiedFunding } from "./data.js";
 import { DecisionStage, createPolicyState, evaluatePurchase, getMerchant, getOffer } from "./policy.js";
+import { scorePurchase } from "./scorer.js";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -55,24 +56,69 @@ async function logGeneratedLlm(state, llm, name, prompt, fallback) {
   logLlm(state, name, prompt, response.text || fallback, model);
 }
 
-function addNanoPayment(state, query) {
+function addNanoPayment(state, action) {
+  const amount = Number(action.x402Price ?? action.priceUsdc ?? action.amount ?? 0);
+  const provider = action.provider || "AIsa real-time catalog endpoint";
+  const endpoint = action.endpoint || "/api/catalog/search";
+  const request = action.query || action.request || action.purpose || "";
+  const kind = action.kind || "seller_api";
   const payment = {
     id: `x402-${state.nanopayments.length + 1}`,
     protocol: "x402",
     rail: "Circle Nanopayments",
     scheme: "GatewayWalletBatched",
     chain: ARC_CONFIG.gatewaySupportedChainName,
-    amount: query.x402Price,
-    paidTo: "AIsa real-time catalog endpoint",
-    request: query.query,
-    signature: fakeHash(query.id, query.query, query.x402Price).slice(0, 18)
+    amount,
+    kind,
+    provider,
+    endpoint,
+    paidTo: provider,
+    request,
+    signature: fakeHash(action.id || paymentSeed(state), provider, endpoint, request, amount).slice(0, 18)
   };
   state.nanopayments.push(payment);
-  state.wallet.nanopaymentSpent = Number((state.wallet.nanopaymentSpent + query.x402Price).toFixed(6));
+  state.wallet.nanopaymentSpent = Number((state.wallet.nanopaymentSpent + amount).toFixed(6));
   return payment;
 }
 
-export function getNanopaymentReceipt(paymentId) {
+function paymentSeed(state) {
+  return `payment-${state.nanopayments.length + 1}`;
+}
+
+export function getNanopaymentReceipt(paymentId, currentState = null) {
+  const existing = currentState?.nanopayments?.find((payment) => payment.id === paymentId);
+  if (existing) {
+    return {
+      id: existing.id,
+      protocol: existing.protocol,
+      rail: existing.rail,
+      scheme: existing.scheme,
+      chain: existing.chain,
+      currency: "USDC",
+      amount: existing.amount,
+      paidTo: existing.paidTo,
+      provider: existing.provider,
+      endpoint: existing.endpoint,
+      request: existing.request,
+      kind: existing.kind,
+      paymentRequired: {
+        network: ARC_CONFIG.gatewaySupportedChainName,
+        maxAmountRequired: `${existing.amount.toFixed(6)} USDC`,
+        resource: existing.endpoint,
+        mimeType: "application/json"
+      },
+      paymentProof: {
+        xPaymentHeader: fakeHash(existing.id, "x-payment", existing.amount),
+        gatewayWallet: ARC_CONFIG.gatewayWalletAddress,
+        signature: existing.signature
+      },
+      status: "accepted_for_demo",
+      note: existing.kind === "scorer_api"
+        ? "Hackathon receipt for a TrustRails scorer API request. Production would verify and submit through the x402 facilitator."
+        : "Hackathon receipt for the x402/Circle Nanopayments data request. Production would verify and submit through the x402 facilitator."
+    };
+  }
+
   const index = Number(String(paymentId || "").replace("x402-", "")) - 1;
   const query = atomicQueries[index];
   if (!query) throw new Error(`Unknown nanopayment receipt: ${paymentId}`);
@@ -86,6 +132,9 @@ export function getNanopaymentReceipt(paymentId) {
     currency: "USDC",
     amount: query.x402Price,
     paidTo: "AIsa real-time catalog endpoint",
+    provider: "AIsa real-time catalog endpoint",
+    endpoint: "/api/catalog/search",
+    kind: "seller_api",
     request: query.query,
     paymentRequired: {
       network: ARC_CONFIG.gatewaySupportedChainName,
@@ -107,10 +156,10 @@ function applySpend(state, result, escrow) {
   const offer = getOffer(result.offerId, state.catalog);
   const merchant = getMerchant(result.merchantId, state.merchants);
 
-  state.wallet.available = Number((state.wallet.available - result.amount).toFixed(2));
   if (escrow) {
     state.wallet.escrowed = Number((state.wallet.escrowed + result.amount).toFixed(2));
   } else {
+    state.wallet.available = Number((state.wallet.available - result.amount).toFixed(2));
     state.wallet.spent = Number((state.wallet.spent + result.amount).toFixed(2));
   }
 
@@ -138,6 +187,18 @@ export function createInitialState() {
       fundingTxHash: verifiedFunding.txHash,
       fundingBlockNumber: verifiedFunding.blockNumber
     },
+    buyerProfile: clone(buyerProfile),
+    architecture: {
+      buyerServer: clone(buyerServer),
+      sellerServers: clone(sellerServers),
+      scorerServer: clone(scorerServer)
+    },
+    scorer: {
+      provider: clone(scorerServer),
+      checks: [],
+      latestInput: null,
+      latestOutput: null
+    },
     policy: createPolicyState(),
     catalog: clone(offers),
     merchants: clone(merchants),
@@ -164,7 +225,7 @@ export function createInitialState() {
     chat: [
       {
         from: "ShopRails",
-        text: "Send the prefilled request to start the agent shopping plan. After review, ask for an explanation or type 'confirm all reviewed items' to release escrow.",
+        text: "Send the prefilled request to start the agent shopping plan. After review, ask for an explanation or type 'confirm all reviewed items' to approve direct seller payments.",
         at: nowIso()
       }
     ],
@@ -183,6 +244,9 @@ export function walletGetBalance(state) {
     escrowed: state.wallet.escrowed,
     spent: state.wallet.spent,
     nanopaymentSpent: state.wallet.nanopaymentSpent,
+    scorerNanopaymentSpent: state.nanopayments
+      .filter((payment) => payment.kind === "scorer_api")
+      .reduce((sum, payment) => Number((sum + Number(payment.amount || 0)).toFixed(6)), 0),
     gatewayBalance: state.wallet.gatewayBalance,
     buyerAddress: state.wallet.buyerAddress,
     agentAddress: state.wallet.agentAddress,
@@ -194,6 +258,60 @@ export function walletGetBalance(state) {
   };
   logTool(state, "wallet.get_balance", {}, output);
   return output;
+}
+
+export function scorerEvaluate(state, input) {
+  const offer = getOffer(input.offerId, state.catalog);
+  const merchant = getMerchant(offer.merchantId, state.merchants);
+  const amount = Number((offer.price * (input.quantity || 1)).toFixed(2));
+  const score = scorePurchase({
+    buyerProfile: state.buyerProfile,
+    policy: state.policy,
+    offer,
+    merchant,
+    amount
+  });
+  const payment = addNanoPayment(state, {
+    id: `score-${offer.id}`,
+    kind: "scorer_api",
+    provider: state.scorer.provider.name,
+    endpoint: state.scorer.provider.endpoint,
+    priceUsdc: state.scorer.provider.priceUsdc,
+    request: `${state.buyerProfile.name} history + ${merchant.domain} + ${offer.id}`,
+    purpose: `Score ${offer.name}`
+  });
+  const record = {
+    id: `score-${state.scorer.checks.length + 1}`,
+    at: nowIso(),
+    offerId: offer.id,
+    offerName: offer.name,
+    merchantId: merchant.id,
+    merchantName: merchant.name,
+    domain: merchant.domain,
+    amount,
+    nanopayment: payment,
+    ...score
+  };
+  state.scorer.checks.push(record);
+  state.scorer.latestInput = score.payload;
+  state.scorer.latestOutput = {
+    decision: score.decision,
+    decisionLabel: score.decisionLabel,
+    approvalScore: score.approvalScore,
+    riskScore: score.riskScore,
+    reasons: score.reasons
+  };
+  logTool(state, "scorer.evaluate", {
+    buyer: state.buyerProfile.id,
+    seller: merchant.domain,
+    offerId: offer.id
+  }, {
+    decision: score.decision,
+    approvalScore: score.approvalScore,
+    riskScore: score.riskScore,
+    nanopayment: payment.id
+  });
+  return record;
 }
 
 export function catalogSearch(state, input) {
@@ -234,20 +352,28 @@ export function merchantGetOffer(state, input) {
 }
 
 export function checkoutEvaluate(state, input) {
-  const output = evaluatePurchase(input, state);
+  const scorer = scorerEvaluate(state, input);
+  const output = evaluatePurchase(input, state, scorer);
   logTool(state, "checkout.evaluate", input, {
     stage: output.stage,
     amount: output.amount,
-    reasons: output.reasons
+    reasons: output.reasons,
+    scorerPayment: scorer.nanopayment.id
   });
   return output;
 }
 
 export function checkoutSubmit(state, input) {
-  const result = evaluatePurchase(input, state);
+  const scorer = scorerEvaluate(state, input);
+  const result = evaluatePurchase(input, state, scorer);
   const simulatedSettlementId = demoSettlementId(result.offerId, result.amount, result.stage);
   const record = {
     ...result,
+    scorer,
+    scorerCheckId: scorer.id,
+    scorerPaymentId: scorer.nanopayment.id,
+    scorerScore: scorer.approvalScore,
+    scorerRiskScore: scorer.riskScore,
     id: `decision-${state.decisions.length + 1}`,
     submittedAt: nowIso(),
     arc: {
@@ -272,8 +398,8 @@ export function checkoutSubmit(state, input) {
     state.orders.push(record);
   } else if (result.stage === DecisionStage.REVIEW_ESCROW) {
     applySpend(state, result, true);
-    record.escrowStatus = "held";
-    record.escrowId = `escrow-${state.reviewCart.length + 1}`;
+    record.escrowStatus = "awaiting buyer review";
+    record.escrowId = `review-${state.reviewCart.length + 1}`;
     record.simulatedSettlementId = simulatedSettlementId;
     const verified = verifiedDemoTransactions[result.offerId];
     if (verified?.kind === "review_release") {
@@ -297,7 +423,8 @@ export function checkoutSubmit(state, input) {
     stage: record.stage,
     escrowStatus: record.escrowStatus,
     txHash: record.txHash || null,
-    simulatedSettlementId: record.simulatedSettlementId
+    simulatedSettlementId: record.simulatedSettlementId,
+    scorerPayment: scorer.nanopayment.id
   });
   return record;
 }
@@ -334,6 +461,7 @@ export function reviewApprove(state, input = {}) {
       approved.push(released);
       state.orders.push(released);
       state.wallet.escrowed = Number((state.wallet.escrowed - item.amount).toFixed(2));
+      state.wallet.available = Number((state.wallet.available - item.amount).toFixed(2));
       state.wallet.spent = Number((state.wallet.spent + item.amount).toFixed(2));
     } else {
       remaining.push(item);
@@ -360,14 +488,14 @@ export function reviewChat(state, input) {
     const result = reviewApprove(state, {});
     state.mission.status = "completed";
     if (!result.approved.length) {
-      reply = "No reviewed items remain in escrow. The cart is already released or nothing has been reviewed yet.";
+      reply = "No reviewed items remain. The cart is already approved or nothing has been reviewed yet.";
     } else {
       const txLines = result.approved.flatMap((item) => [
-        item.txHash ? `${item.offerName} escrow create: ${arcTxUrl(item.txHash)}` : "",
-        item.releaseTxHash ? `${item.offerName} release: ${arcTxUrl(item.releaseTxHash)}` : ""
+        item.txHash ? `${item.offerName} review authorization: ${arcTxUrl(item.txHash)}` : "",
+        item.releaseTxHash ? `${item.offerName} direct seller payment: ${arcTxUrl(item.releaseTxHash)}` : ""
       ]).filter(Boolean);
       reply = [
-        `Confirmed ${result.approved.length} escrowed item(s). Circle Wallets submitted Arc USDC release transactions to sellers.`,
+        `Confirmed ${result.approved.length} reviewed item(s). Circle Wallets submitted direct Arc USDC payment transactions to sellers.`,
         "ArcScan transactions:",
         ...txLines
       ].join("\n");
@@ -378,7 +506,7 @@ export function reviewChat(state, input) {
       ? rows.map((item) => `${item.offerName}: ${item.agentReason}`).join("\n")
       : "No items are waiting for review.";
   } else {
-    reply = "I can release reviewed items, explain why each item was chosen, or keep funds in escrow.";
+    reply = "I can approve reviewed items, explain why each item was chosen, or keep items waiting for review.";
   }
 
   state.chat.push({ from: "Shopping Cart", text: reply, at: nowIso() });
@@ -444,7 +572,7 @@ export async function runDemoMissionWithLlm(state, llm) {
     llm,
     "llm.review_summary",
     "Explain the cart state to the buyer.",
-    `${state.orders.length} item(s) settled immediately, ${state.reviewCart.length} item(s) held in escrow for review, ${state.declined.length} item(s) declined before signing.`
+    `${state.orders.length} item(s) settled immediately, ${state.reviewCart.length} item(s) waiting for buyer review, ${state.declined.length} item(s) declined before signing.`
   );
 
   state.mission.status = "waiting_for_review";
@@ -510,7 +638,7 @@ export function runDemoMission(state) {
     state,
     "llm.review_summary",
     "Explain the cart state to the buyer.",
-    `${state.orders.length} item(s) settled immediately, ${state.reviewCart.length} item(s) held in escrow for review, ${state.declined.length} item(s) declined before signing.`
+    `${state.orders.length} item(s) settled immediately, ${state.reviewCart.length} item(s) waiting for buyer review, ${state.declined.length} item(s) declined before signing.`
   );
 
   state.mission.status = "waiting_for_review";

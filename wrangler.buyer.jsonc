@@ -1,0 +1,6 @@
+{
+  "name": "shoprails-buyer-server",
+  "main": "workers/buyer.js",
+  "compatibility_date": "2026-04-26",
+  "workers_dev": true
+}

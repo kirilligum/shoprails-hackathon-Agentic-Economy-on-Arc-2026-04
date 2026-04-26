@@ -19,6 +19,7 @@ import {
   reviewList,
   runDemoMission,
   runDemoMissionWithLlm,
+  scorerEvaluate,
   walletGetBalance
 } from "./src/shoprails-tools.js";
 
@@ -249,6 +250,10 @@ async function routeApi(req, res) {
     return sendJson(res, 200, checkoutEvaluate(state, body));
   }
 
+  if (req.method === "POST" && (url.pathname === "/api/mcp/scorer.score" || url.pathname === "/api/scorer/evaluate")) {
+    return sendJson(res, 200, scorerEvaluate(state, body));
+  }
+
   if (req.method === "POST" && url.pathname === "/api/mcp/checkout.submit") {
     return sendJson(res, 200, checkoutSubmit(state, body));
   }
@@ -259,7 +264,7 @@ async function routeApi(req, res) {
 
   if (req.method === "GET" && url.pathname.startsWith("/api/receipts/nanopayment/")) {
     const paymentId = url.pathname.split("/").at(-1);
-    return sendJson(res, 200, getNanopaymentReceipt(paymentId));
+    return sendJson(res, 200, getNanopaymentReceipt(paymentId, state));
   }
 
   if (req.method === "POST" && url.pathname === "/api/mcp/review.chat") {
