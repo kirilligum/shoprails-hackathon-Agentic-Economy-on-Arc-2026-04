@@ -7,6 +7,7 @@ import {
 import { DecisionStage, formatUsdc, getMerchant } from "./policy.js";
 
 let state = createInitialState();
+let activeWorkspaceTab = "mission";
 let activeStore = "sushi";
 let activeInstruction = null;
 let chatDraft = "confirm all reviewed items";
@@ -236,6 +237,58 @@ function merchantOffers(merchantId) {
   return state.catalog.filter((offer) => offer.merchantId === merchantId);
 }
 
+function renderWorkspaceTabs({ autoBought, pendingReview, releasedReview, declined }) {
+  const tabs = [
+    {
+      id: "mission",
+      label: "Agent",
+      detail: state.mission.status === "completed" ? "proofs ready" : "mission control"
+    },
+    {
+      id: "wallet",
+      label: "Wallet",
+      detail: `${formatDisplayUsdc(state.wallet.available)} available`
+    },
+    {
+      id: "cart",
+      label: "Review cart",
+      detail: `${pendingReview} pending, ${releasedReview} released`
+    },
+    {
+      id: "stores",
+      label: "Stores",
+      detail: `${storefronts.length} agent-readable`
+    }
+  ];
+
+  return `
+    <nav class="workspace-tabs" role="tablist" aria-label="ShopRails demo surfaces">
+      ${tabs.map((tab) => `
+        <button
+          type="button"
+          class="${tab.id === activeWorkspaceTab ? "active" : ""}"
+          role="tab"
+          aria-selected="${tab.id === activeWorkspaceTab}"
+          aria-controls="workspace-${tab.id}"
+          id="tab-${tab.id}"
+          data-workspace-tab="${tab.id}">
+          <span>${tab.label}</span>
+          <small>${tab.detail}</small>
+        </button>
+      `).join("")}
+      <div class="workspace-summary" aria-label="Mission totals">
+        <b>${autoBought}</b><span>buy now</span>
+        <b>${declined}</b><span>declined</span>
+      </div>
+    </nav>
+  `;
+}
+
+function tabPanelAttrs(id) {
+  const selected = activeWorkspaceTab === id;
+  return `id="workspace-${id}" role="tabpanel" aria-labelledby="tab-${id}" ${selected ? "" : "hidden"}`;
+}
+
 function renderShell() {
   const autoBought = state.decisions.filter((item) => item.stage === DecisionStage.BUY_NOW).length;
   const pendingReview = state.reviewCart.length;
@@ -257,7 +310,9 @@ function renderShell() {
     </header>
 
     <main class="layout">
-      <section class="panel mission-panel">
+      ${renderWorkspaceTabs({ autoBought, pendingReview, releasedReview, declined })}
+
+      <section class="panel tab-panel mission-panel" ${tabPanelAttrs("mission")}>
         <div class="section-head">
           <div>
             <p class="eyebrow">Agent activity</p>
@@ -304,7 +359,7 @@ function renderShell() {
         </div>
       </section>
 
-      <section class="panel wallet-panel">
+      <section class="panel tab-panel wallet-panel" ${tabPanelAttrs("wallet")}>
         <div class="section-head">
           <div>
             <p class="eyebrow">Wallet and policy</p>
@@ -354,7 +409,7 @@ function renderShell() {
         </div>
       </section>
 
-      <section class="panel cart-panel">
+      <section class="panel tab-panel cart-panel" ${tabPanelAttrs("cart")}>
         <div class="section-head">
           <div>
             <p class="eyebrow">Shopping cart review</p>
@@ -370,7 +425,7 @@ function renderShell() {
         ${renderChat()}
       </section>
 
-      <section class="panel stores-panel">
+      <section class="panel tab-panel stores-panel" ${tabPanelAttrs("stores")}>
         <div class="section-head">
           <div>
             <p class="eyebrow">Agent-readable stores</p>
@@ -734,9 +789,17 @@ function renderStore() {
 }
 
 function bindEvents() {
+  app.querySelectorAll("[data-workspace-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeWorkspaceTab = button.dataset.workspaceTab;
+      renderShell();
+    });
+  });
+
   app.querySelectorAll("[data-action='run-full-demo']").forEach((button) => {
     button.addEventListener("click", async () => {
       llmMode = "gemini";
+      activeWorkspaceTab = "mission";
       state = createInitialState();
       chatDraft = "confirm all reviewed items";
       aiTestStatus = null;
@@ -766,6 +829,7 @@ function bindEvents() {
 
   app.querySelectorAll("[data-action='run-demo']").forEach((button) => {
     button.addEventListener("click", async () => {
+      activeWorkspaceTab = "mission";
       state = createInitialState();
       chatDraft = "confirm all reviewed items";
       liveStatus = `Running ${llmMode === "gemini" ? "Gemini" : "mock"} LLM calls and loading verified Arc transactions at price / 100,000.`;
@@ -800,6 +864,7 @@ function bindEvents() {
 
   app.querySelector("[data-action='reset']").addEventListener("click", () => {
     state = createInitialState();
+    activeWorkspaceTab = "mission";
     activeInstruction = null;
     chatDraft = "confirm all reviewed items";
     liveStatus = "";
