@@ -2,7 +2,9 @@
 
 ## Live Demo: [https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev](https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev)
 
-**Hosted on Cloudflare Workers.** No password login is required. The header includes a user-supplied Google AI Studio / Gemini API key field plus a `Mock` switch for cached demo responses.
+**Hosted on Cloudflare Workers.** No password login is required.
+
+To use live Gemini/Nano Banana calls, create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey), paste it into the app header, and switch `Mock` off. To run the click-only demo without a key, leave `Mock` on; the app uses cached live Gemini responses.
 
 Distributed demo workers:
 
