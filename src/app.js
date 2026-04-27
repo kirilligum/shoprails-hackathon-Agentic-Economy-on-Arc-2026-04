@@ -144,17 +144,19 @@ Bad examples:
 
   "add-funds": `Purpose: help the buyer fund the Arc Testnet wallet with USDC.
 
-LLM action semantics: use this when the buyer wants to add funds before shopping. The correct next step is to show the buyer wallet address, Circle faucet link, and ArcScan address. In production, this could also initiate an on-ramp or transfer request.
+LLM action semantics: use this when the buyer wants to add funds before shopping. The correct next step is to show the buyer wallet address, Circle faucet link, and ArcScan address. Any public demo user can add Arc Testnet USDC to this wallet from the Circle faucet or by transferring testnet USDC from their own Arc Testnet wallet. In production, this could also initiate an on-ramp or transfer request.
 
-Side effects in this demo: no funds move automatically. The UI displays deposit instructions and keeps the buyer address visible.
+Side effects in this demo: no funds move automatically from clicking this button. The UI displays deposit instructions and keeps the buyer address visible. Funding is testnet-only; it does not use real cards, production USDC, or the presenter Gemini key. Once a user sends testnet USDC, ArcScan is the source of truth for whether the top-up confirmed.
 
 Good few-shot examples:
 - Buyer says "top up my wallet" -> click Add funds and show the Arc Testnet address.
 - Presenter needs test USDC -> click Add funds, then use Circle faucet or transfer to the buyer address.
+- Judge wants to try fresh Arc nano transactions -> click Add funds, copy the wallet address, and send a small amount of Arc Testnet USDC before running the flow.
 
 Bad examples:
 - Do not claim the wallet was funded unless an Arc transaction confirms it.
-- Do not ask the agent to enter card details or private keys.`,
+- Do not ask the agent to enter card details, production private keys, or a mainnet wallet seed.
+- Do not describe testnet USDC as withdrawable real money.`,
 
   "withdraw-funds": `Purpose: start a buyer-controlled withdrawal flow from the ShopRails wallet.
 
