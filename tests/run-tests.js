@@ -105,7 +105,7 @@ test("async demo mission supports the mock LLM provider", async () => {
 
   assert.equal(result.autoBought, 3);
   assert.equal(state.llmLog.length, 4);
-  assert.ok(state.llmLog.every((entry) => entry.model === "mock-shoprails-llm"));
+  assert.ok(state.llmLog.every((entry) => /cached|mock|Gemini/i.test(entry.model)));
 });
 
 test("try-on action builder returns four one-micro-USDC nano actions", () => {

@@ -2,7 +2,7 @@
 
 ## Live Demo: [https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev](https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev)
 
-**Hosted on Cloudflare Workers.** Judge login: `guest@guest.com` / `aS28ZVhk3upyMzPJY34dw`
+**Hosted on Cloudflare Workers.** No password login is required. The header includes a user-supplied Google AI Studio / Gemini API key field plus a `Mock` switch for cached demo responses.
 
 Distributed demo workers:
 
@@ -248,19 +248,19 @@ Open `http://localhost:4173` for local development, or use the hosted Cloudflare
 
 ```text
 URL: https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.workers.dev
-Login: guest@guest.com
-Password: aS28ZVhk3upyMzPJY34dw
+Access: no password login required
 ```
 
 The safest hackathon path is click-only:
 
-1. Click `Run full demo` or `Run perfect hackathon demo`.
-2. Point to the Judge proof panel.
-3. Open the Circle Wallets ArcScan tx, x402 transfer proof, escrow contract, and 50+ Arc tx proof if asked.
-4. Open `Wallet` and point to `Add funds`, `Withdraw funds`, daily spend limits, seller caps, and blacklist controls.
-5. Open `Stores > Costume Store`, click `Load Kirill photo`, then click `Put on`.
-6. Return to `Wallet` and point to the highlighted virtual try-on nano transactions.
-7. Use the prefilled cart chat, `confirm all reviewed items`, to show review release.
+1. Leave `Mock` on for the safest click-only path, or paste a Google AI Studio / Gemini API key in the header and switch `Mock` off for live Gemini calls.
+2. Click `Run full demo` or `Run perfect hackathon demo`.
+3. Point to the Judge proof panel.
+4. Open the Circle Wallets ArcScan tx, x402 transfer proof, escrow contract, and 50+ Arc tx proof if asked.
+5. Open `Wallet` and point to `Add funds`, `Withdraw funds`, daily spend limits, seller caps, and blacklist controls.
+6. Open `Stores > Costume Store`, click `Load Kirill photo`, then click `Put on`.
+7. Return to `Wallet` and point to the highlighted virtual try-on nano transactions.
+8. Use the prefilled cart chat, `confirm all reviewed items`, to show review release.
 
 Useful commands:
 
@@ -272,10 +272,9 @@ npm run circle:transfer
 npm run arc:frequency -- --count=50 --amount=0.000001
 ```
 
-Secrets live in `.env.local` and are intentionally ignored by git. Copy `.env.example` for the required keys:
+Secrets live in `.env.local` and are intentionally ignored by git. Gemini is no longer stored as a shared server key; users paste their own Google AI Studio key into the app header when they want live LLM/image calls. Copy `.env.example` for the backend payment keys:
 
 ```text
-GEMINI_API_KEY=
 CIRCLE_API_KEY=
 CIRCLE_ENTITY_SECRET=
 CIRCLE_WALLET_SET_ID=
@@ -286,11 +285,12 @@ CIRCLE_WALLET_BLOCKCHAIN=ARC-TESTNET
 
 ## LLM And Images
 
-- The demo UI uses live Gemini text calls by default; it does not expose mock LLM mode.
+- The demo UI starts in `Mock` mode using cached live Gemini responses generated before the shared key was removed.
+- The header has a Google AI Studio / Gemini API key field; switch `Mock` off to use that user-supplied key for live calls.
 - Real text calls use `gemini-3.1-flash-lite-preview`, with `gemini-3-flash-preview` as a real fallback model.
-- Product images use the configured Gemini image provider, `gemini-3.1-flash-image-preview` for the Nano Banana 2-style image path.
+- Product images use `gemini-3.1-flash-image-preview` for the Nano Banana 2-style image path when a user key is provided; otherwise the app uses cached generated assets.
 - Virtual try-on uses `kirill_standing.jpg` plus `gemini-3.1-flash-image-preview`, cached locally under `artifacts/generated-images` and on Cloudflare in the `TRYON_CACHE` KV namespace.
-- `Test AI providers` verifies real Gemini text, fallback behavior, and image generation from inside the app.
+- `Test AI providers` verifies either the user-key live Gemini path or cached mock mode from inside the app.
 - Generated product assets live in `artifacts/generated-images`.
 
 ## Submission Information
@@ -347,12 +347,7 @@ Hosted: `https://shoprails-hackathon-agentic-economy-on-arc-2026-04.kirill-igum.
 
 Local: `http://localhost:4173`
 
-Judge demo credentials:
-
-```text
-Login: guest@guest.com
-Password: aS28ZVhk3upyMzPJY34dw
-```
+Judge demo access: no password login required. Use the header `Mock` switch for cached responses, or paste a Google AI Studio / Gemini API key for live Gemini/Nano Banana calls.
 
 ### Required Transaction Flow Demonstration
 

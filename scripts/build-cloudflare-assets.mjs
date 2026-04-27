@@ -38,6 +38,7 @@ const artifactRootFiles = await readdir("artifacts", { withFileTypes: true });
 const allowedJson = new Set([
   "arc-escrow-live.json",
   "arc-frequency-demo-live.json",
+  "cached-llm-responses.json",
   "circle-wallets-live.json",
   "circle-wallets-payment-live.json",
   "x402-nanopayment-live.json"

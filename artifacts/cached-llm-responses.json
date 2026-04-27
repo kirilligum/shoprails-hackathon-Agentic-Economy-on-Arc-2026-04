@@ -1,0 +1,1017 @@
+{
+  "generatedAt": "2026-04-27T07:17:19.165Z",
+  "source": "gemini-live-before-user-key-ui",
+  "model": "Gemini gemini-3.1-flash-lite-preview",
+  "missionPrompt": "Organize and setup a sushi dinner for my friends on Friday, May 1, 2026. 10 people. 7 PM. At MindsDB office. Pirate theme. Order sushi, pirate one-size costumes, cheap props, and hire a human assistant.",
+  "result": {
+    "mission": {
+      "prompt": "Organize and setup a sushi dinner for my friends on Friday, May 1, 2026. 10 people. 7 PM. At MindsDB office. Pirate theme. Order sushi, pirate one-size costumes, cheap props, and hire a human assistant.",
+      "status": "waiting_for_review",
+      "steps": [
+        {
+          "type": "search",
+          "label": "sushi",
+          "detail": "sushi platter delivery for 10 people, Friday before 7 PM, MindsDB office",
+          "resultCount": 4,
+          "nanopayment": 0.00042
+        },
+        {
+          "type": "search",
+          "label": "drinks",
+          "detail": "serving utensils chopsticks soy sauce kit for sushi dinner",
+          "resultCount": 3,
+          "nanopayment": 0.00018
+        },
+        {
+          "type": "search",
+          "label": "costumes",
+          "detail": "one-size pirate costumes or accessories for 10 adults",
+          "resultCount": 4,
+          "nanopayment": 0.00036
+        },
+        {
+          "type": "search",
+          "label": "props",
+          "detail": "cheap pirate theme props for office dinner table",
+          "resultCount": 5,
+          "nanopayment": 0.00024
+        },
+        {
+          "type": "search",
+          "label": "assistant",
+          "detail": "human assistant receive delivery unpack setup office dinner",
+          "resultCount": 6,
+          "nanopayment": 0.00047
+        },
+        {
+          "type": "decision",
+          "label": "10-person sushi party set",
+          "detail": "BUY_NOW",
+          "amount": 184
+        },
+        {
+          "type": "decision",
+          "label": "Bamboo chopsticks and soy kit",
+          "detail": "BUY_NOW",
+          "amount": 22
+        },
+        {
+          "type": "decision",
+          "label": "Cheap pirate props bundle",
+          "detail": "BUY_NOW",
+          "amount": 34
+        },
+        {
+          "type": "decision",
+          "label": "One-size pirate costume pack",
+          "detail": "REVIEW_ESCROW",
+          "amount": 60
+        },
+        {
+          "type": "decision",
+          "label": "Setup assistant Maya R.",
+          "detail": "REVIEW_ESCROW",
+          "amount": 95
+        },
+        {
+          "type": "decision",
+          "label": "Ultra-cheap pirate chest add-on",
+          "detail": "DECLINE_BLACKLISTED",
+          "amount": 22
+        }
+      ]
+    },
+    "submitted": [
+      {
+        "stage": "BUY_NOW",
+        "offerId": "sushi-party-set",
+        "offerName": "10-person sushi party set",
+        "merchantId": "sushi-harbor",
+        "merchantName": "Sushi Harbor",
+        "merchantWallet": "0xa11ce00000000000000000000000000000000001",
+        "domain": "sushi-harbor.shoprails.demo",
+        "category": "sushi",
+        "amount": 184,
+        "brand": "Sushi Harbor",
+        "route": "Direct Arc USDC payment from buyer wallet to seller wallet",
+        "reasons": [
+          "Trusted seller, category, amount, and risk score are inside buyer policy."
+        ],
+        "riskSignals": [
+          {
+            "code": "INDEPENDENT_SCORER",
+            "label": "Independent scorer",
+            "score": 4,
+            "detail": "TrustRails Scorer returned buy now with approval score 96/100."
+          },
+          {
+            "code": "MERCHANT_REPUTATION",
+            "label": "Merchant reputation",
+            "score": 18,
+            "detail": "Sushi Harbor trust tier is trusted."
+          },
+          {
+            "code": "COLLABORATIVE_PRICE_PATTERN",
+            "label": "Collaborative price pattern",
+            "score": 21,
+            "detail": "Compared against anonymized seeded purchase clusters for similar agent tasks."
+          }
+        ],
+        "agentReason": "Balanced rolls, vegetarian pieces, and nigiri sized for ten guests before the 7 PM dinner.",
+        "scorer": {
+          "id": "score-1",
+          "at": "2026-04-27T07:17:18.227Z",
+          "offerId": "sushi-party-set",
+          "offerName": "10-person sushi party set",
+          "merchantId": "sushi-harbor",
+          "merchantName": "Sushi Harbor",
+          "domain": "sushi-harbor.shoprails.demo",
+          "amount": 184,
+          "nanopayment": {
+            "id": "x402-6",
+            "protocol": "x402",
+            "rail": "Circle Nanopayments",
+            "scheme": "GatewayWalletBatched",
+            "chain": "arcTestnet",
+            "amount": 0.000006,
+            "kind": "scorer_api",
+            "provider": "TrustRails Scorer",
+            "endpoint": "/api/scorer/evaluate",
+            "paidTo": "TrustRails Scorer",
+            "request": "Maya Chen history + sushi-harbor.shoprails.demo + sushi-party-set",
+            "signature": "0xadd79d54add79d54"
+          },
+          "provider": "TrustRails Scorer",
+          "endpoint": "/api/scorer/evaluate",
+          "decision": "BUY_NOW",
+          "decisionLabel": "buy now",
+          "approvalScore": 96,
+          "riskScore": 4,
+          "trustScore": 96,
+          "reasons": [
+            "Buyer has successful prior purchases with this seller."
+          ],
+          "payload": {
+            "buyer": {
+              "id": "buyer-maya-chen",
+              "name": "Maya Chen",
+              "wallet": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+              "successfulOrders": 38,
+              "chargebacks": 0,
+              "categoryHistory": {
+                "orders": 5,
+                "averageUsdc": 160,
+                "refundRate": 0
+              },
+              "merchantHistory": {
+                "successfulOrders": 3,
+                "lastOrderDaysAgo": 11
+              }
+            },
+            "seller": {
+              "id": "sushi-harbor",
+              "name": "Sushi Harbor",
+              "domain": "sushi-harbor.shoprails.demo",
+              "wallet": "0xa11ce00000000000000000000000000000000001",
+              "trustTier": "trusted",
+              "rating": 4.8,
+              "reputationScore": 18
+            },
+            "item": {
+              "id": "sushi-party-set",
+              "name": "10-person sushi party set",
+              "category": "sushi",
+              "brand": "Sushi Harbor",
+              "amountUsdc": 184,
+              "seededRiskScore": 21
+            },
+            "policy": {
+              "autoApproveLimitUsdc": 220,
+              "categoryCapUsdc": 240,
+              "alwaysReview": [
+                "assistant"
+              ],
+              "whitelistedDomains": [
+                "sushi-harbor.shoprails.demo",
+                "sevenseas-costumes.shoprails.demo",
+                "taskdock.shoprails.demo"
+              ],
+              "blacklistedDomains": [
+                "blackbeard-outlet.invalid"
+              ],
+              "blacklistedBrands": [
+                "Grey Market Costume Liquidators"
+              ]
+            }
+          }
+        },
+        "scorerCheckId": "score-1",
+        "scorerPaymentId": "x402-6",
+        "scorerScore": 96,
+        "scorerRiskScore": 4,
+        "id": "decision-1",
+        "submittedAt": "2026-04-27T07:17:18.228Z",
+        "arc": {
+          "network": "Arc Testnet",
+          "chainId": 5042002,
+          "usdcAddress": "0x3600000000000000000000000000000000000000",
+          "explorerUrl": "https://testnet.arcscan.app"
+        },
+        "escrowStatus": "settled",
+        "simulatedSettlementId": "demo-9b80a4259b",
+        "txHash": "0xaa212bda4c8c0eaa307bb02b6a7b77d90dc66f10ac0d666fa6d8ace9106b9f24",
+        "onchainAmount": "0.001840",
+        "onchainBlockNumber": 39020641,
+        "realArcStatus": "confirmed"
+      },
+      {
+        "stage": "BUY_NOW",
+        "offerId": "bamboo-utensils",
+        "offerName": "Bamboo chopsticks and soy kit",
+        "merchantId": "sushi-harbor",
+        "merchantName": "Sushi Harbor",
+        "merchantWallet": "0xa11ce00000000000000000000000000000000001",
+        "domain": "sushi-harbor.shoprails.demo",
+        "category": "drinks",
+        "amount": 22,
+        "brand": "Sushi Harbor",
+        "route": "Direct Arc USDC payment from buyer wallet to seller wallet",
+        "reasons": [
+          "Trusted seller, category, amount, and risk score are inside buyer policy."
+        ],
+        "riskSignals": [
+          {
+            "code": "INDEPENDENT_SCORER",
+            "label": "Independent scorer",
+            "score": 1,
+            "detail": "TrustRails Scorer returned buy now with approval score 99/100."
+          },
+          {
+            "code": "MERCHANT_REPUTATION",
+            "label": "Merchant reputation",
+            "score": 18,
+            "detail": "Sushi Harbor trust tier is trusted."
+          },
+          {
+            "code": "COLLABORATIVE_PRICE_PATTERN",
+            "label": "Collaborative price pattern",
+            "score": 16,
+            "detail": "Compared against anonymized seeded purchase clusters for similar agent tasks."
+          }
+        ],
+        "agentReason": "Adds chopsticks, soy sauce, napkins, and serving trays so the assistant can set the dinner quickly.",
+        "scorer": {
+          "id": "score-2",
+          "at": "2026-04-27T07:17:18.228Z",
+          "offerId": "bamboo-utensils",
+          "offerName": "Bamboo chopsticks and soy kit",
+          "merchantId": "sushi-harbor",
+          "merchantName": "Sushi Harbor",
+          "domain": "sushi-harbor.shoprails.demo",
+          "amount": 22,
+          "nanopayment": {
+            "id": "x402-7",
+            "protocol": "x402",
+            "rail": "Circle Nanopayments",
+            "scheme": "GatewayWalletBatched",
+            "chain": "arcTestnet",
+            "amount": 0.000006,
+            "kind": "scorer_api",
+            "provider": "TrustRails Scorer",
+            "endpoint": "/api/scorer/evaluate",
+            "paidTo": "TrustRails Scorer",
+            "request": "Maya Chen history + sushi-harbor.shoprails.demo + bamboo-utensils",
+            "signature": "0xe17da11ce17da11c"
+          },
+          "provider": "TrustRails Scorer",
+          "endpoint": "/api/scorer/evaluate",
+          "decision": "BUY_NOW",
+          "decisionLabel": "buy now",
+          "approvalScore": 99,
+          "riskScore": 1,
+          "trustScore": 99,
+          "reasons": [
+            "Buyer has successful prior purchases with this seller."
+          ],
+          "payload": {
+            "buyer": {
+              "id": "buyer-maya-chen",
+              "name": "Maya Chen",
+              "wallet": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+              "successfulOrders": 38,
+              "chargebacks": 0,
+              "categoryHistory": {
+                "orders": 9,
+                "averageUsdc": 28,
+                "refundRate": 0
+              },
+              "merchantHistory": {
+                "successfulOrders": 3,
+                "lastOrderDaysAgo": 11
+              }
+            },
+            "seller": {
+              "id": "sushi-harbor",
+              "name": "Sushi Harbor",
+              "domain": "sushi-harbor.shoprails.demo",
+              "wallet": "0xa11ce00000000000000000000000000000000001",
+              "trustTier": "trusted",
+              "rating": 4.8,
+              "reputationScore": 18
+            },
+            "item": {
+              "id": "bamboo-utensils",
+              "name": "Bamboo chopsticks and soy kit",
+              "category": "drinks",
+              "brand": "Sushi Harbor",
+              "amountUsdc": 22,
+              "seededRiskScore": 16
+            },
+            "policy": {
+              "autoApproveLimitUsdc": 35,
+              "categoryCapUsdc": 35,
+              "alwaysReview": [
+                "assistant"
+              ],
+              "whitelistedDomains": [
+                "sushi-harbor.shoprails.demo",
+                "sevenseas-costumes.shoprails.demo",
+                "taskdock.shoprails.demo"
+              ],
+              "blacklistedDomains": [
+                "blackbeard-outlet.invalid"
+              ],
+              "blacklistedBrands": [
+                "Grey Market Costume Liquidators"
+              ]
+            }
+          }
+        },
+        "scorerCheckId": "score-2",
+        "scorerPaymentId": "x402-7",
+        "scorerScore": 99,
+        "scorerRiskScore": 1,
+        "id": "decision-2",
+        "submittedAt": "2026-04-27T07:17:18.228Z",
+        "arc": {
+          "network": "Arc Testnet",
+          "chainId": 5042002,
+          "usdcAddress": "0x3600000000000000000000000000000000000000",
+          "explorerUrl": "https://testnet.arcscan.app"
+        },
+        "escrowStatus": "settled",
+        "simulatedSettlementId": "demo-a673693ea6",
+        "txHash": "0xbcae9999571fd6e704703425d7bf3a7129c2d928f7533581258a42ade92460bd",
+        "onchainAmount": "0.000220",
+        "onchainBlockNumber": 39020651,
+        "realArcStatus": "confirmed"
+      },
+      {
+        "stage": "BUY_NOW",
+        "offerId": "pirate-props-bundle",
+        "offerName": "Cheap pirate props bundle",
+        "merchantId": "sevenseas-costumes",
+        "merchantName": "Seven Seas Costume Co.",
+        "merchantWallet": "0xb0b0000000000000000000000000000000000002",
+        "domain": "sevenseas-costumes.shoprails.demo",
+        "category": "props",
+        "amount": 34,
+        "brand": "Seven Seas Basics",
+        "route": "Direct Arc USDC payment from buyer wallet to seller wallet",
+        "reasons": [
+          "Trusted seller, category, amount, and risk score are inside buyer policy."
+        ],
+        "riskSignals": [
+          {
+            "code": "INDEPENDENT_SCORER",
+            "label": "Independent scorer",
+            "score": 25,
+            "detail": "TrustRails Scorer returned buy now with approval score 75/100."
+          },
+          {
+            "code": "MERCHANT_REPUTATION",
+            "label": "Merchant reputation",
+            "score": 39,
+            "detail": "Seven Seas Costume Co. trust tier is standard."
+          },
+          {
+            "code": "COLLABORATIVE_PRICE_PATTERN",
+            "label": "Collaborative price pattern",
+            "score": 33,
+            "detail": "Compared against anonymized seeded purchase clusters for similar agent tasks."
+          }
+        ],
+        "agentReason": "Low-cost table props that carry the theme without consuming the costume budget.",
+        "scorer": {
+          "id": "score-3",
+          "at": "2026-04-27T07:17:18.229Z",
+          "offerId": "pirate-props-bundle",
+          "offerName": "Cheap pirate props bundle",
+          "merchantId": "sevenseas-costumes",
+          "merchantName": "Seven Seas Costume Co.",
+          "domain": "sevenseas-costumes.shoprails.demo",
+          "amount": 34,
+          "nanopayment": {
+            "id": "x402-8",
+            "protocol": "x402",
+            "rail": "Circle Nanopayments",
+            "scheme": "GatewayWalletBatched",
+            "chain": "arcTestnet",
+            "amount": 0.000006,
+            "kind": "scorer_api",
+            "provider": "TrustRails Scorer",
+            "endpoint": "/api/scorer/evaluate",
+            "paidTo": "TrustRails Scorer",
+            "request": "Maya Chen history + sevenseas-costumes.shoprails.demo + pirate-props-bundle",
+            "signature": "0x8818c1368818c136"
+          },
+          "provider": "TrustRails Scorer",
+          "endpoint": "/api/scorer/evaluate",
+          "decision": "BUY_NOW",
+          "decisionLabel": "buy now",
+          "approvalScore": 75,
+          "riskScore": 25,
+          "trustScore": 75,
+          "reasons": [
+            "Buyer has successful prior purchases with this seller."
+          ],
+          "payload": {
+            "buyer": {
+              "id": "buyer-maya-chen",
+              "name": "Maya Chen",
+              "wallet": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+              "successfulOrders": 38,
+              "chargebacks": 0,
+              "categoryHistory": {
+                "orders": 12,
+                "averageUsdc": 26,
+                "refundRate": 0.01
+              },
+              "merchantHistory": {
+                "successfulOrders": 2,
+                "lastOrderDaysAgo": 43
+              }
+            },
+            "seller": {
+              "id": "sevenseas-costumes",
+              "name": "Seven Seas Costume Co.",
+              "domain": "sevenseas-costumes.shoprails.demo",
+              "wallet": "0xb0b0000000000000000000000000000000000002",
+              "trustTier": "standard",
+              "rating": 4.5,
+              "reputationScore": 39
+            },
+            "item": {
+              "id": "pirate-props-bundle",
+              "name": "Cheap pirate props bundle",
+              "category": "props",
+              "brand": "Seven Seas Basics",
+              "amountUsdc": 34,
+              "seededRiskScore": 33
+            },
+            "policy": {
+              "autoApproveLimitUsdc": 45,
+              "categoryCapUsdc": 60,
+              "alwaysReview": [
+                "assistant"
+              ],
+              "whitelistedDomains": [
+                "sushi-harbor.shoprails.demo",
+                "sevenseas-costumes.shoprails.demo",
+                "taskdock.shoprails.demo"
+              ],
+              "blacklistedDomains": [
+                "blackbeard-outlet.invalid"
+              ],
+              "blacklistedBrands": [
+                "Grey Market Costume Liquidators"
+              ]
+            }
+          }
+        },
+        "scorerCheckId": "score-3",
+        "scorerPaymentId": "x402-8",
+        "scorerScore": 75,
+        "scorerRiskScore": 25,
+        "id": "decision-3",
+        "submittedAt": "2026-04-27T07:17:18.229Z",
+        "arc": {
+          "network": "Arc Testnet",
+          "chainId": 5042002,
+          "usdcAddress": "0x3600000000000000000000000000000000000000",
+          "explorerUrl": "https://testnet.arcscan.app"
+        },
+        "escrowStatus": "settled",
+        "simulatedSettlementId": "demo-f9dbca42f9",
+        "txHash": "0xfde09042d86469cf2881f39e442d2481eb8bd2a162269c9e91abf637d526e5cc",
+        "onchainAmount": "0.000340",
+        "onchainBlockNumber": 39020653,
+        "realArcStatus": "confirmed"
+      },
+      {
+        "stage": "REVIEW_ESCROW",
+        "offerId": "crew-costume-pack",
+        "offerName": "One-size pirate costume pack",
+        "merchantId": "sevenseas-costumes",
+        "merchantName": "Seven Seas Costume Co.",
+        "merchantWallet": "0xb0b0000000000000000000000000000000000002",
+        "domain": "sevenseas-costumes.shoprails.demo",
+        "category": "costumes",
+        "amount": 60,
+        "brand": "Seven Seas Basics",
+        "route": "Buyer review before direct Arc USDC seller payment",
+        "reasons": [
+          "Amount 60.00 USDC is above the costumes auto-buy limit of 50.00 USDC.",
+          "Independent scorer returned review with approval score 66/100.",
+          "Amount is above the costumes auto-approve limit.",
+          "Buyer has successful prior purchases with this seller."
+        ],
+        "riskSignals": [
+          {
+            "code": "INDEPENDENT_SCORER",
+            "label": "Independent scorer",
+            "score": 34,
+            "detail": "TrustRails Scorer returned review with approval score 66/100."
+          },
+          {
+            "code": "MERCHANT_REPUTATION",
+            "label": "Merchant reputation",
+            "score": 39,
+            "detail": "Seven Seas Costume Co. trust tier is standard."
+          },
+          {
+            "code": "COLLABORATIVE_PRICE_PATTERN",
+            "label": "Collaborative price pattern",
+            "score": 48,
+            "detail": "Compared against anonymized seeded purchase clusters for similar agent tasks."
+          }
+        ],
+        "agentReason": "Ten simple one-size kits avoid sizing questions and match the pirate theme request while keeping the demo price at 60 USDC.",
+        "scorer": {
+          "id": "score-4",
+          "at": "2026-04-27T07:17:18.229Z",
+          "offerId": "crew-costume-pack",
+          "offerName": "One-size pirate costume pack",
+          "merchantId": "sevenseas-costumes",
+          "merchantName": "Seven Seas Costume Co.",
+          "domain": "sevenseas-costumes.shoprails.demo",
+          "amount": 60,
+          "nanopayment": {
+            "id": "x402-9",
+            "protocol": "x402",
+            "rail": "Circle Nanopayments",
+            "scheme": "GatewayWalletBatched",
+            "chain": "arcTestnet",
+            "amount": 0.000006,
+            "kind": "scorer_api",
+            "provider": "TrustRails Scorer",
+            "endpoint": "/api/scorer/evaluate",
+            "paidTo": "TrustRails Scorer",
+            "request": "Maya Chen history + sevenseas-costumes.shoprails.demo + crew-costume-pack",
+            "signature": "0x89afbce089afbce0"
+          },
+          "provider": "TrustRails Scorer",
+          "endpoint": "/api/scorer/evaluate",
+          "decision": "REVIEW_ESCROW",
+          "decisionLabel": "review",
+          "approvalScore": 66,
+          "riskScore": 34,
+          "trustScore": 66,
+          "reasons": [
+            "Amount is above the costumes auto-approve limit.",
+            "Buyer has successful prior purchases with this seller."
+          ],
+          "payload": {
+            "buyer": {
+              "id": "buyer-maya-chen",
+              "name": "Maya Chen",
+              "wallet": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+              "successfulOrders": 38,
+              "chargebacks": 0,
+              "categoryHistory": {
+                "orders": 3,
+                "averageUsdc": 68,
+                "refundRate": 0
+              },
+              "merchantHistory": {
+                "successfulOrders": 2,
+                "lastOrderDaysAgo": 43
+              }
+            },
+            "seller": {
+              "id": "sevenseas-costumes",
+              "name": "Seven Seas Costume Co.",
+              "domain": "sevenseas-costumes.shoprails.demo",
+              "wallet": "0xb0b0000000000000000000000000000000000002",
+              "trustTier": "standard",
+              "rating": 4.5,
+              "reputationScore": 39
+            },
+            "item": {
+              "id": "crew-costume-pack",
+              "name": "One-size pirate costume pack",
+              "category": "costumes",
+              "brand": "Seven Seas Basics",
+              "amountUsdc": 60,
+              "seededRiskScore": 48
+            },
+            "policy": {
+              "autoApproveLimitUsdc": 50,
+              "categoryCapUsdc": 180,
+              "alwaysReview": [
+                "assistant"
+              ],
+              "whitelistedDomains": [
+                "sushi-harbor.shoprails.demo",
+                "sevenseas-costumes.shoprails.demo",
+                "taskdock.shoprails.demo"
+              ],
+              "blacklistedDomains": [
+                "blackbeard-outlet.invalid"
+              ],
+              "blacklistedBrands": [
+                "Grey Market Costume Liquidators"
+              ]
+            }
+          }
+        },
+        "scorerCheckId": "score-4",
+        "scorerPaymentId": "x402-9",
+        "scorerScore": 66,
+        "scorerRiskScore": 34,
+        "id": "decision-4",
+        "submittedAt": "2026-04-27T07:17:18.264Z",
+        "arc": {
+          "network": "Arc Testnet",
+          "chainId": 5042002,
+          "usdcAddress": "0x3600000000000000000000000000000000000000",
+          "explorerUrl": "https://testnet.arcscan.app"
+        },
+        "escrowStatus": "awaiting buyer review",
+        "escrowId": "review-1",
+        "simulatedSettlementId": "demo-5763835157",
+        "txHash": "0x5d3e06fe2c6b322d2cedffca55e912ecfa4d8d0b4231681c00074ccd0c16553c",
+        "onchainAmount": "0.000600",
+        "onchainBlockNumber": 39028456,
+        "realArcStatus": "confirmed",
+        "liveEscrowId": "1",
+        "liveEscrowContract": "0x50c86d09A84186b87C60600Fb43aec5b4687EADC"
+      },
+      {
+        "stage": "REVIEW_ESCROW",
+        "offerId": "assistant-maya",
+        "offerName": "Setup assistant Maya R.",
+        "merchantId": "taskdock",
+        "merchantName": "TaskDock Assistants",
+        "merchantWallet": "0xc0ffee0000000000000000000000000000000003",
+        "domain": "taskdock.shoprails.demo",
+        "category": "assistant",
+        "amount": 95,
+        "brand": "TaskDock",
+        "route": "Buyer review before direct Arc USDC seller payment",
+        "reasons": [
+          "Category requires human buyer review.",
+          "Amount 95.00 USDC is above the assistant auto-buy limit of 0.00 USDC.",
+          "Risk score 70 requires review.",
+          "Independent scorer returned review with approval score 56/100.",
+          "Category always requires buyer review.",
+          "Amount is above the assistant auto-approve limit.",
+          "Buyer has successful prior purchases with this seller."
+        ],
+        "riskSignals": [
+          {
+            "code": "INDEPENDENT_SCORER",
+            "label": "Independent scorer",
+            "score": 44,
+            "detail": "TrustRails Scorer returned review with approval score 56/100."
+          },
+          {
+            "code": "MERCHANT_REPUTATION",
+            "label": "Merchant reputation",
+            "score": 44,
+            "detail": "TaskDock Assistants trust tier is standard."
+          },
+          {
+            "code": "COLLABORATIVE_PRICE_PATTERN",
+            "label": "Collaborative price pattern",
+            "score": 57,
+            "detail": "Compared against anonymized seeded purchase clusters for similar agent tasks."
+          },
+          {
+            "code": "HUMAN_SERVICE",
+            "label": "Human service",
+            "score": 70,
+            "detail": "Hiring a person requires buyer review and clear task instructions."
+          }
+        ],
+        "agentReason": "Receives deliveries, unpacks sushi and props, sets up pirate theme, and texts completion photos.",
+        "scorer": {
+          "id": "score-5",
+          "at": "2026-04-27T07:17:18.265Z",
+          "offerId": "assistant-maya",
+          "offerName": "Setup assistant Maya R.",
+          "merchantId": "taskdock",
+          "merchantName": "TaskDock Assistants",
+          "domain": "taskdock.shoprails.demo",
+          "amount": 95,
+          "nanopayment": {
+            "id": "x402-10",
+            "protocol": "x402",
+            "rail": "Circle Nanopayments",
+            "scheme": "GatewayWalletBatched",
+            "chain": "arcTestnet",
+            "amount": 0.000006,
+            "kind": "scorer_api",
+            "provider": "TrustRails Scorer",
+            "endpoint": "/api/scorer/evaluate",
+            "paidTo": "TrustRails Scorer",
+            "request": "Maya Chen history + taskdock.shoprails.demo + assistant-maya",
+            "signature": "0x8ed1567b8ed1567b"
+          },
+          "provider": "TrustRails Scorer",
+          "endpoint": "/api/scorer/evaluate",
+          "decision": "REVIEW_ESCROW",
+          "decisionLabel": "review",
+          "approvalScore": 56,
+          "riskScore": 44,
+          "trustScore": 56,
+          "reasons": [
+            "Category always requires buyer review.",
+            "Amount is above the assistant auto-approve limit.",
+            "Buyer has successful prior purchases with this seller."
+          ],
+          "payload": {
+            "buyer": {
+              "id": "buyer-maya-chen",
+              "name": "Maya Chen",
+              "wallet": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+              "successfulOrders": 38,
+              "chargebacks": 0,
+              "categoryHistory": {
+                "orders": 4,
+                "averageUsdc": 82,
+                "refundRate": 0
+              },
+              "merchantHistory": {
+                "successfulOrders": 1,
+                "lastOrderDaysAgo": 27
+              }
+            },
+            "seller": {
+              "id": "taskdock",
+              "name": "TaskDock Assistants",
+              "domain": "taskdock.shoprails.demo",
+              "wallet": "0xc0ffee0000000000000000000000000000000003",
+              "trustTier": "standard",
+              "rating": 4.7,
+              "reputationScore": 44
+            },
+            "item": {
+              "id": "assistant-maya",
+              "name": "Setup assistant Maya R.",
+              "category": "assistant",
+              "brand": "TaskDock",
+              "amountUsdc": 95,
+              "seededRiskScore": 57
+            },
+            "policy": {
+              "autoApproveLimitUsdc": 0,
+              "categoryCapUsdc": 120,
+              "alwaysReview": [
+                "assistant"
+              ],
+              "whitelistedDomains": [
+                "sushi-harbor.shoprails.demo",
+                "sevenseas-costumes.shoprails.demo",
+                "taskdock.shoprails.demo"
+              ],
+              "blacklistedDomains": [
+                "blackbeard-outlet.invalid"
+              ],
+              "blacklistedBrands": [
+                "Grey Market Costume Liquidators"
+              ]
+            }
+          }
+        },
+        "scorerCheckId": "score-5",
+        "scorerPaymentId": "x402-10",
+        "scorerScore": 56,
+        "scorerRiskScore": 44,
+        "id": "decision-5",
+        "submittedAt": "2026-04-27T07:17:18.268Z",
+        "arc": {
+          "network": "Arc Testnet",
+          "chainId": 5042002,
+          "usdcAddress": "0x3600000000000000000000000000000000000000",
+          "explorerUrl": "https://testnet.arcscan.app"
+        },
+        "escrowStatus": "awaiting buyer review",
+        "escrowId": "review-2",
+        "simulatedSettlementId": "demo-95f61d7295",
+        "txHash": "0xf8754e0a5b73f40ff697ea61702d2f5bcf0d99004ddc21df801d18b739705c1c",
+        "onchainAmount": "0.000950",
+        "onchainBlockNumber": 39028475,
+        "realArcStatus": "confirmed",
+        "liveEscrowId": "2",
+        "liveEscrowContract": "0x50c86d09A84186b87C60600Fb43aec5b4687EADC"
+      },
+      {
+        "stage": "DECLINE_BLACKLISTED",
+        "offerId": "blacklisted-props",
+        "offerName": "Ultra-cheap pirate chest add-on",
+        "merchantId": "blackbeard-outlet",
+        "merchantName": "Blackbeard Outlet",
+        "merchantWallet": "0xbad0000000000000000000000000000000000004",
+        "domain": "blackbeard-outlet.invalid",
+        "category": "props",
+        "amount": 22,
+        "brand": "Grey Market Costume Liquidators",
+        "route": "Blocked before Circle signing",
+        "reasons": [
+          "Independent scorer or buyer policy blocked the seller or brand.",
+          "Seller, domain, or brand is blocked by buyer policy or scorer reputation.",
+          "Seller is outside the buyer allowlist."
+        ],
+        "riskSignals": [
+          {
+            "code": "INDEPENDENT_SCORER",
+            "label": "Independent scorer",
+            "score": 100,
+            "detail": "TrustRails Scorer returned blacklisted with approval score 0/100."
+          },
+          {
+            "code": "MERCHANT_REPUTATION",
+            "label": "Merchant reputation",
+            "score": 96,
+            "detail": "Blackbeard Outlet trust tier is blocked."
+          },
+          {
+            "code": "COLLABORATIVE_PRICE_PATTERN",
+            "label": "Collaborative price pattern",
+            "score": 97,
+            "detail": "Compared against anonymized seeded purchase clusters for similar agent tasks."
+          },
+          {
+            "code": "BLACKLISTED_DOMAIN",
+            "label": "Blacklisted domain",
+            "score": 100,
+            "detail": "blackbeard-outlet.invalid is blocked by buyer policy."
+          },
+          {
+            "code": "BLACKLISTED_BRAND",
+            "label": "Blacklisted brand",
+            "score": 100,
+            "detail": "Grey Market Costume Liquidators is blocked by buyer policy."
+          },
+          {
+            "code": "DOMAIN_NOT_WHITELISTED",
+            "label": "Domain not whitelisted",
+            "score": 96,
+            "detail": "blackbeard-outlet.invalid needs review because it is outside the buyer allowlist."
+          }
+        ],
+        "agentReason": "Looks cheap, but seller is blacklisted for failed fulfillment and chargeback patterns.",
+        "scorer": {
+          "id": "score-6",
+          "at": "2026-04-27T07:17:18.268Z",
+          "offerId": "blacklisted-props",
+          "offerName": "Ultra-cheap pirate chest add-on",
+          "merchantId": "blackbeard-outlet",
+          "merchantName": "Blackbeard Outlet",
+          "domain": "blackbeard-outlet.invalid",
+          "amount": 22,
+          "nanopayment": {
+            "id": "x402-11",
+            "protocol": "x402",
+            "rail": "Circle Nanopayments",
+            "scheme": "GatewayWalletBatched",
+            "chain": "arcTestnet",
+            "amount": 0.000006,
+            "kind": "scorer_api",
+            "provider": "TrustRails Scorer",
+            "endpoint": "/api/scorer/evaluate",
+            "paidTo": "TrustRails Scorer",
+            "request": "Maya Chen history + blackbeard-outlet.invalid + blacklisted-props",
+            "signature": "0x7901c8ff7901c8ff"
+          },
+          "provider": "TrustRails Scorer",
+          "endpoint": "/api/scorer/evaluate",
+          "decision": "DECLINE_BLACKLISTED",
+          "decisionLabel": "blacklisted",
+          "approvalScore": 0,
+          "riskScore": 100,
+          "trustScore": 0,
+          "reasons": [
+            "Seller, domain, or brand is blocked by buyer policy or scorer reputation.",
+            "Seller is outside the buyer allowlist."
+          ],
+          "payload": {
+            "buyer": {
+              "id": "buyer-maya-chen",
+              "name": "Maya Chen",
+              "wallet": "0xE6420890312234643FC16a42147f7d8EeD9Be1F6",
+              "successfulOrders": 38,
+              "chargebacks": 0,
+              "categoryHistory": {
+                "orders": 12,
+                "averageUsdc": 26,
+                "refundRate": 0.01
+              },
+              "merchantHistory": null
+            },
+            "seller": {
+              "id": "blackbeard-outlet",
+              "name": "Blackbeard Outlet",
+              "domain": "blackbeard-outlet.invalid",
+              "wallet": "0xbad0000000000000000000000000000000000004",
+              "trustTier": "blocked",
+              "rating": 2.1,
+              "reputationScore": 96
+            },
+            "item": {
+              "id": "blacklisted-props",
+              "name": "Ultra-cheap pirate chest add-on",
+              "category": "props",
+              "brand": "Grey Market Costume Liquidators",
+              "amountUsdc": 22,
+              "seededRiskScore": 97
+            },
+            "policy": {
+              "autoApproveLimitUsdc": 45,
+              "categoryCapUsdc": 60,
+              "alwaysReview": [
+                "assistant"
+              ],
+              "whitelistedDomains": [
+                "sushi-harbor.shoprails.demo",
+                "sevenseas-costumes.shoprails.demo",
+                "taskdock.shoprails.demo"
+              ],
+              "blacklistedDomains": [
+                "blackbeard-outlet.invalid"
+              ],
+              "blacklistedBrands": [
+                "Grey Market Costume Liquidators"
+              ]
+            }
+          }
+        },
+        "scorerCheckId": "score-6",
+        "scorerPaymentId": "x402-11",
+        "scorerScore": 0,
+        "scorerRiskScore": 100,
+        "id": "decision-6",
+        "submittedAt": "2026-04-27T07:17:18.268Z",
+        "arc": {
+          "network": "Arc Testnet",
+          "chainId": 5042002,
+          "usdcAddress": "0x3600000000000000000000000000000000000000",
+          "explorerUrl": "https://testnet.arcscan.app"
+        },
+        "escrowStatus": "blocked",
+        "txHash": null,
+        "simulatedSettlementId": null
+      }
+    ],
+    "reviewItems": 2,
+    "declined": 1,
+    "autoBought": 3
+  },
+  "responses": {
+    "llm.review_summary": {
+      "name": "llm.review_summary",
+      "model": "Gemini gemini-3.1-flash-lite-preview",
+      "prompt": "Explain the cart state to the buyer.",
+      "output": "Your cart currently contains 3 settled items, 2 items awaiting your review, and 1 item that was declined prior to signing."
+    },
+    "llm.rank_offers": {
+      "name": "llm.rank_offers",
+      "model": "Gemini gemini-3.1-flash-lite-preview",
+      "prompt": "Pick the best offers for a 10-person pirate sushi dinner.",
+      "output": "I have selected the sushi for 10, serving kit, budget props, and one-size costume pack, while assigning Maya R. for setup and rejecting the blacklisted mystery props."
+    },
+    "llm.expand_atomic_queries": {
+      "name": "llm.expand_atomic_queries",
+      "model": "Gemini gemini-3.1-flash-lite-preview",
+      "prompt": "Generate purchasable searches from the party context.",
+      "output": "ShopRails can coordinate the delivery of a sushi platter, pirate costumes, and themed props for your office party, including an assistant to handle setup."
+    },
+    "llm.plan_mission": {
+      "name": "llm.plan_mission",
+      "model": "Gemini gemini-3.1-flash-lite-preview",
+      "prompt": "Organize and setup a sushi dinner for my friends on Friday, May 1, 2026. 10 people. 7 PM. At MindsDB office. Pirate theme. Order sushi, pirate one-size costumes, cheap props, and hire a human assistant.",
+      "output": "llm.plan_mission(tasks=[\"order sushi\", \"purchase pirate costumes and props\", \"acquire serving kit\", \"request human assistant for setup\"], budget=500, constraints=\"route human services to review\")"
+    }
+  },
+  "cartChat": {
+    "client.explain_cart": {
+      "model": "Gemini gemini-3.1-flash-lite-preview",
+      "output": "The cart separates safe low-cost purchases from items needing buyer judgment. Buy Now items are allowlisted, low-risk, and below policy caps. Sushi, costume packs, and the human assistant need review because they are perishable, higher value, or involve human labor. Blacklisted sellers stay blocked and receive no payment."
+    },
+    "client.chat": {
+      "model": "Gemini gemini-3.1-flash-lite-preview",
+      "output": "I can explain any item, show the policy reason, or return the ArcScan transaction links after approval. I will not claim funds moved until the deterministic checkout tool confirms review approval."
+    }
+  }
+}

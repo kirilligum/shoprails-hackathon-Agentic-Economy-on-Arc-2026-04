@@ -15,7 +15,7 @@ import {
   scorerEvaluate,
   walletGetBalance
 } from "../src/shoprails-tools.js";
-import { TRY_ON_IMAGE_MODEL, TRY_ON_PERSON_IMAGE, buildTryOnNanoActions, buildTryOnPrompt, dryRunTryOnNanoActions, getCostumeTryOnOffer, tryOnCacheKey } from "../src/try-on.js";
+import { TRY_ON_IMAGE_MODEL, TRY_ON_PERSON_IMAGE, buildTryOnNanoActions, buildTryOnPrompt, dryRunTryOnNanoActions, getCostumeTryOnOffer, tryOnCacheKey, tryOnFileName } from "../src/try-on.js";
 
 const TEXT_MODEL = "gemini-3.1-flash-lite-preview";
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
@@ -38,9 +38,9 @@ function textFromGeminiResponse(payload) {
     .trim();
 }
 
-async function callGeminiText(env, model, { name, prompt, fallback }) {
-  if (!env.GEMINI_API_KEY) {
-    throw new Error("Hosted Gemini is not configured. Add GEMINI_API_KEY as a Cloudflare Worker secret.");
+async function callGeminiText(apiKey, model, { name, prompt, fallback }) {
+  if (!apiKey) {
+    throw new Error("Enter a Google AI Studio / Gemini API key in the ShopRails header, or switch LLM mode to mock.");
   }
 
   const responseStyle = String(name || "").startsWith("client.")
@@ -74,7 +74,7 @@ async function callGeminiText(env, model, { name, prompt, fallback }) {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-goog-api-key": env.GEMINI_API_KEY
+      "x-goog-api-key": apiKey
     },
     body: JSON.stringify(body)
   });
@@ -94,7 +94,27 @@ async function callGeminiText(env, model, { name, prompt, fallback }) {
   return text;
 }
 
-function createHostedLlmProvider(env) {
+function cachedLlmText(cache, name, fallback) {
+  return cache?.responses?.[name]?.output || cache?.cartChat?.[name]?.output || fallback || `Cached ShopRails response for ${name}`;
+}
+
+function createHostedLlmProvider(env, { mode = "mock", apiKey = "", cache = null } = {}) {
+  if (mode === "mock") {
+    const cacheModel = cache?.model || "shoprails-llm";
+    return {
+      provider: "mock",
+      model: `Cached ${cacheModel}`,
+      async generateText(input) {
+        const cached = cache?.responses?.[input.name] || cache?.cartChat?.[input.name] || null;
+        return {
+          provider: "mock",
+          model: `Cached ${cached?.model || cacheModel}`,
+          text: cachedLlmText(cache, input.name, input.fallback)
+        };
+      }
+    };
+  }
+
   return {
     provider: "gemini",
     model: TEXT_MODEL,
@@ -103,13 +123,13 @@ function createHostedLlmProvider(env) {
         return {
           provider: "gemini",
           model: TEXT_MODEL,
-          text: await callGeminiText(env, TEXT_MODEL, input)
+          text: await callGeminiText(apiKey, TEXT_MODEL, input)
         };
       } catch (primaryError) {
         return {
           provider: "gemini",
           model: TEXT_FALLBACK_MODEL,
-          text: await callGeminiText(env, TEXT_FALLBACK_MODEL, input)
+          text: await callGeminiText(apiKey, TEXT_FALLBACK_MODEL, input)
         };
       }
     }
@@ -186,40 +206,6 @@ async function getHostedArcBalance(address) {
     explorerUrl: arcAddressUrl(address),
     source: "arc_rpc_worker"
   };
-}
-
-function unauthorized() {
-  return new Response("ShopRails demo login required.", {
-    status: 401,
-    headers: {
-      "www-authenticate": 'Basic realm="ShopRails Hackathon Demo", charset="UTF-8"',
-      "cache-control": "no-store"
-    }
-  });
-}
-
-async function sha256Hex(value) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function isAuthorized(request, env) {
-  const header = request.headers.get("authorization") || "";
-  if (!header.startsWith("Basic ")) return false;
-
-  let decoded = "";
-  try {
-    decoded = atob(header.slice(6));
-  } catch {
-    return false;
-  }
-
-  const separator = decoded.indexOf(":");
-  if (separator === -1) return false;
-  const login = decoded.slice(0, separator);
-  const password = decoded.slice(separator + 1);
-  const [loginHash, passwordHash] = await Promise.all([sha256Hex(login), sha256Hex(password)]);
-  return loginHash === env.TEST_LOGIN_SHA256 && passwordHash === env.TEST_PASSWORD_SHA256;
 }
 
 async function readAssetJson(env, request, path) {
@@ -584,7 +570,7 @@ function imageFromGeminiResponse(payload) {
   return null;
 }
 
-async function hostedTryOnImage(env, request, offer, personImageUrl) {
+async function hostedTryOnImage(env, request, offer, personImageUrl, { mode = "gemini", apiKey = "" } = {}) {
   const model = env.GEMINI_IMAGE_MODEL || IMAGE_MODEL;
   const cacheKey = tryOnCacheKey(offer.id, model);
   if (env.TRYON_CACHE) {
@@ -592,8 +578,34 @@ async function hostedTryOnImage(env, request, offer, personImageUrl) {
     if (cached?.url) return { ...cached, cached: true };
   }
 
-  if (!env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not configured on the Worker, and no cached try-on image exists.");
+  const cachedAssetPath = `/artifacts/generated-images/${tryOnFileName(offer.id, model)}`;
+  const cachedAssetUrl = new URL(cachedAssetPath, request.url);
+  const cachedAssetResponse = await env.ASSETS.fetch(new Request(cachedAssetUrl));
+  if (mode === "mock" && cachedAssetResponse.ok) {
+    return {
+      offerId: offer.id,
+      provider: "mock",
+      model,
+      url: cachedAssetPath,
+      prompt: buildTryOnPrompt(offer),
+      promptSummary: "Cached Gemini virtual try-on generated before the shared key was removed.",
+      cached: true
+    };
+  }
+
+  if (!apiKey) {
+    if (cachedAssetResponse.ok) {
+      return {
+        offerId: offer.id,
+        provider: "mock",
+        model,
+        url: cachedAssetPath,
+        prompt: buildTryOnPrompt(offer),
+        promptSummary: "Cached Gemini virtual try-on. Add a user Gemini key and switch mock off for a fresh image.",
+        cached: true
+      };
+    }
+    throw new Error("Enter a Google AI Studio / Gemini API key in the ShopRails header, or switch mock on if a cached try-on image exists.");
   }
 
   const assetUrl = new URL(personImageUrl || TRY_ON_PERSON_IMAGE, request.url);
@@ -606,7 +618,7 @@ async function hostedTryOnImage(env, request, offer, personImageUrl) {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-goog-api-key": env.GEMINI_API_KEY
+      "x-goog-api-key": apiKey
     },
     body: JSON.stringify({
       contents: [
@@ -678,33 +690,68 @@ async function cachedProofs(env, request) {
   };
 }
 
-function cachedAiProof() {
+function cachedAiProof({ mode = "mock", cache = null, apiKey = "" } = {}) {
+  if (mode === "mock") {
+    return {
+      geminiKeyConfigured: false,
+      mode: "mock",
+      configuredText: {
+        model: cache?.model || TEXT_MODEL,
+        provider: "mock",
+        ok: true,
+        text: cachedLlmText(cache, "llm.plan_mission", "ShopRails cached text OK")
+      },
+      flashLitePreview: {
+        model: TEXT_MODEL,
+        ok: true,
+        text: "Skipped in mock mode."
+      },
+      textFallback: {
+        model: TEXT_FALLBACK_MODEL,
+        ok: true,
+        text: "Skipped in mock mode."
+      },
+      image: {
+        provider: "mock",
+        model: IMAGE_MODEL,
+        ok: true,
+        url: "/artifacts/generated-images/shoprails-ai-self-test-gemini-3-1-flash-image-preview.png",
+        cached: true
+      },
+      note: "Mock mode uses cached Gemini responses generated before the shared demo key was removed."
+    };
+  }
+
   return {
-    geminiKeyConfigured: true,
+    geminiKeyConfigured: Boolean(apiKey),
     configuredText: {
       model: TEXT_MODEL,
       provider: "gemini",
-      ok: true,
-      text: "ShopRails text OK"
+      ok: Boolean(apiKey),
+      text: apiKey ? "Live Gemini key provided by browser session." : "",
+      error: apiKey ? "" : "Enter a Google AI Studio / Gemini API key in the header."
     },
     flashLitePreview: {
       model: TEXT_MODEL,
-      ok: true,
-      text: "ShopRails text OK"
+      ok: Boolean(apiKey),
+      text: apiKey ? "Ready for live Gemini calls." : "",
+      error: apiKey ? "" : "Missing user-provided Gemini API key."
     },
     textFallback: {
-      model: "gemini-3-flash-preview",
-      ok: true,
-      text: "ShopRails text OK"
+      model: TEXT_FALLBACK_MODEL,
+      ok: Boolean(apiKey),
+      text: apiKey ? "Ready for fallback live Gemini calls." : "",
+      error: apiKey ? "" : "Missing user-provided Gemini API key."
     },
     image: {
       provider: "gemini",
       model: IMAGE_MODEL,
-      ok: true,
+      ok: Boolean(apiKey),
       url: "/artifacts/generated-images/shoprails-ai-self-test-gemini-3-1-flash-image-preview.png",
-      cached: true
+      cached: true,
+      error: apiKey ? "" : "Missing user-provided Gemini API key."
     },
-    note: "Hosted Worker uses live Gemini text calls when GEMINI_API_KEY is configured and cached real Nano Banana proof artifacts generated before deployment."
+    note: "Hosted Worker no longer stores a shared Gemini key. Live Gemini calls use the key entered in the header; cached images remain available for demo reliability."
   };
 }
 
@@ -835,10 +882,21 @@ async function readJson(request) {
   return text ? JSON.parse(text) : {};
 }
 
+function requestGeminiApiKey(request, body = {}) {
+  return String(request.headers.get("x-shoprails-gemini-key") || body.geminiApiKey || "").trim();
+}
+
+async function readCachedLlm(env, request) {
+  return (await readAssetJson(env, request, "/artifacts/cached-llm-responses.json")) || null;
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const method = request.method;
   const body = method === "POST" ? await readJson(request) : {};
+  const llmMode = body.llmMode === "gemini" || body.llmMode === "real" ? "gemini" : "mock";
+  const geminiApiKey = requestGeminiApiKey(request, body);
+  const cachedLlm = await readCachedLlm(env, request);
   await loadHostedState(env);
   const withSavedState = async (payload, status = 200) => {
     await saveHostedState(env, hostedState);
@@ -852,14 +910,22 @@ async function handleApi(request, env) {
 
   if (method === "POST" && url.pathname === "/api/demo/run") {
     hostedState = createInitialState();
-    const result = await runDemoMissionWithLlm(hostedState, createHostedLlmProvider(env));
+    const result = await runDemoMissionWithLlm(hostedState, createHostedLlmProvider(env, {
+      mode: llmMode,
+      apiKey: geminiApiKey,
+      cache: cachedLlm
+    }));
     hostedState.proofs = { ...hostedState.proofs, ...(await cachedProofs(env, request)), ai: hostedState.proofs.ai };
     return withSavedState({ result, state: hostedState });
   }
 
   if (method === "POST" && url.pathname === "/api/demo/full") {
     hostedState = createInitialState();
-    const result = await runDemoMissionWithLlm(hostedState, createHostedLlmProvider(env));
+    const result = await runDemoMissionWithLlm(hostedState, createHostedLlmProvider(env, {
+      mode: llmMode,
+      apiKey: geminiApiKey,
+      cache: cachedLlm
+    }));
     const proofs = await cachedProofs(env, request);
     hostedState.proofs = proofs;
     return withSavedState({ result, proofs, state: hostedState });
@@ -873,12 +939,18 @@ async function handleApi(request, env) {
       textFallbackModel: TEXT_FALLBACK_MODEL,
       imageModel: IMAGE_MODEL,
       fastImageModel: "gemini-2.5-flash-image",
-      geminiKeyConfigured: Boolean(env.GEMINI_API_KEY)
+      geminiKeyConfigured: false,
+      userKeyRequired: true,
+      cachedLlmResponsesConfigured: Boolean(cachedLlm)
     });
   }
 
   if (method === "POST" && url.pathname === "/api/llm/call") {
-    return json(await createHostedLlmProvider(env).generateText({
+    return json(await createHostedLlmProvider(env, {
+      mode: llmMode,
+      apiKey: geminiApiKey,
+      cache: cachedLlm
+    }).generateText({
       name: body.name || "llm.demo_call",
       prompt: body.prompt || "Explain ShopRails in one sentence.",
       fallback: body.fallback || "ShopRails lets agents shop with wallet policies, risk review, and Arc USDC settlement."
@@ -886,7 +958,29 @@ async function handleApi(request, env) {
   }
 
   if (method === "POST" && url.pathname === "/api/ai/self-test") {
-    return json(cachedAiProof());
+    if (llmMode === "gemini" && geminiApiKey) {
+      const text = await callGeminiText(geminiApiKey, TEXT_MODEL, {
+        name: "llm.app_self_test",
+        prompt: "Reply with exactly: ShopRails text OK",
+        fallback: "ShopRails text OK"
+      });
+      return json({
+        ...cachedAiProof({ mode: llmMode, cache: cachedLlm, apiKey: geminiApiKey }),
+        configuredText: {
+          model: TEXT_MODEL,
+          provider: "gemini",
+          ok: true,
+          text
+        },
+        flashLitePreview: {
+          model: TEXT_MODEL,
+          ok: true,
+          text
+        },
+        note: "Live Gemini text self-test used the user-provided key from the header. Nano Banana proof remains cached unless the try-on flow generates a fresh image."
+      });
+    }
+    return json(cachedAiProof({ mode: llmMode, cache: cachedLlm, apiKey: geminiApiKey }));
   }
 
   if (method === "POST" && url.pathname === "/api/images/generate") {
@@ -927,7 +1021,10 @@ async function handleApi(request, env) {
       });
     }
 
-    const image = await hostedTryOnImage(env, request, offer, personImageUrl);
+    const image = await hostedTryOnImage(env, request, offer, personImageUrl, {
+      mode: body.imageMode || body.mode || llmMode,
+      apiKey: geminiApiKey
+    });
     const actions = buildTryOnNanoActions(offerId, offers);
     let nanoTransactions;
     let signer = { mode: "circle_wallets_worker", fallback: false };
@@ -1120,8 +1217,6 @@ async function handleApi(request, env) {
 
 export default {
   async fetch(request, env) {
-    if (!(await isAuthorized(request, env))) return unauthorized();
-
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/")) {
       try {

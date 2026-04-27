@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { shoprailsEnv } from "./env.js";
 import { TRY_ON_IMAGE_MODEL, TRY_ON_PERSON_IMAGE, buildTryOnPrompt, tryOnFileName } from "./try-on.js";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const GENERATED_DIR = join(process.cwd(), "artifacts", "generated-images");
+const CACHED_LLM_PATH = join(process.cwd(), "artifacts", "cached-llm-responses.json");
 
 function safeFileName(value) {
   return String(value).replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
@@ -27,6 +28,9 @@ function simpleMockSvg(label, colors) {
 }
 
 function mockTextFor(name, prompt, fallback) {
+  const cached = readCachedLlmResponse(name);
+  if (cached) return cached.output || cached.text || fallback;
+
   const canned = {
     "llm.plan_mission":
       "Split the buyer request into sushi delivery, serving supplies, pirate costumes, cheap props, and a setup assistant. Enforce the 500 USDC policy and route custom human labor through review.",
@@ -38,6 +42,21 @@ function mockTextFor(name, prompt, fallback) {
       "The cart is demo-ready: trusted low-risk items settled immediately, higher-control purchases are in review escrow, and blacklisted listings were declined before signing."
   };
   return canned[name] || fallback || `Mock LLM response for ${name}: ${prompt}`;
+}
+
+function readCachedLlmResponses() {
+  if (!existsSync(CACHED_LLM_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync(CACHED_LLM_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readCachedLlmResponse(name) {
+  const cache = readCachedLlmResponses();
+  if (!cache) return null;
+  return cache.responses?.[name] || cache.cartChat?.[name] || null;
 }
 
 function textFromGeminiResponse(payload) {
@@ -102,26 +121,35 @@ export function getLlmRuntimeConfig() {
     textFallbackModel: env.textFallbackModel,
     imageModel: env.imageModel,
     fastImageModel: env.fastImageModel,
-    geminiKeyConfigured: Boolean(env.geminiApiKey)
+    geminiKeyConfigured: false,
+    userKeyRequired: true,
+    cachedLlmResponsesConfigured: Boolean(readCachedLlmResponses())
   };
 }
 
-export function createLlmProvider(mode = "mock") {
+export function createLlmProvider(mode = "mock", options = {}) {
   const env = shoprailsEnv();
   const provider = mode === "gemini" || mode === "real" ? "gemini" : "mock";
+  const geminiApiKey = options.geminiApiKey || options.apiKey || "";
 
   if (provider === "mock") {
+    const cacheModel = readCachedLlmResponses()?.model || "shoprails-llm";
     return {
       provider,
-      model: "mock-shoprails-llm",
+      model: `Cached ${cacheModel}`,
       async generateText({ name, prompt, fallback }) {
+        const cached = readCachedLlmResponse(name);
         return {
           provider,
-          model: "mock-shoprails-llm",
+          model: `Cached ${cached?.model || cacheModel}`,
           text: mockTextFor(name, prompt, fallback)
         };
       }
     };
+  }
+
+  if (!geminiApiKey) {
+    throw new Error("Enter a Google AI Studio / Gemini API key in the ShopRails header, or switch LLM mode to mock.");
   }
 
   return {
@@ -156,7 +184,7 @@ export function createLlmProvider(mode = "mock") {
       };
 
       try {
-        const payload = await callGemini(env.textModel, body, env.geminiApiKey);
+        const payload = await callGemini(env.textModel, body, geminiApiKey);
         const text = textFromGeminiResponse(payload);
         if (!text) throw new Error(`Gemini model ${env.textModel} returned no text.`);
         return {
@@ -166,7 +194,7 @@ export function createLlmProvider(mode = "mock") {
         };
       } catch (primaryError) {
         if (!env.textFallbackModel || env.textFallbackModel === env.textModel) throw primaryError;
-        const payload = await callGemini(env.textFallbackModel, body, env.geminiApiKey);
+        const payload = await callGemini(env.textFallbackModel, body, geminiApiKey);
         const text = textFromGeminiResponse(payload);
         if (!text) throw new Error(`Gemini fallback model ${env.textFallbackModel} returned no text.`);
         return {
@@ -179,7 +207,7 @@ export function createLlmProvider(mode = "mock") {
   };
 }
 
-export async function probeGeminiTextModel(model, prompt = "Reply with exactly: ShopRails text OK") {
+export async function probeGeminiTextModel(model, prompt = "Reply with exactly: ShopRails text OK", apiKey = "") {
   const env = shoprailsEnv();
   try {
     const payload = await callGemini(
@@ -191,7 +219,7 @@ export async function probeGeminiTextModel(model, prompt = "Reply with exactly: 
           }
         ]
       },
-      env.geminiApiKey
+      apiKey
     );
     return {
       model,
@@ -207,12 +235,75 @@ export async function probeGeminiTextModel(model, prompt = "Reply with exactly: 
   }
 }
 
-export async function runAiProviderSelfTest() {
+export async function runAiProviderSelfTest(options = {}) {
   const env = shoprailsEnv();
+  const mode = options.mode || "gemini";
+  const geminiApiKey = options.geminiApiKey || options.apiKey || "";
+  if (mode === "mock") {
+    return {
+      geminiKeyConfigured: false,
+      mode: "mock",
+      configuredText: {
+        model: readCachedLlmResponses()?.model || "cached-shoprails-llm",
+        provider: "mock",
+        ok: true,
+        text: mockTextFor("llm.plan_mission", "", "ShopRails cached text OK")
+      },
+      flashLitePreview: {
+        model: env.textModel,
+        ok: true,
+        text: "Skipped in mock mode."
+      },
+      textFallback: {
+        model: env.textFallbackModel,
+        ok: true,
+        text: "Skipped in mock mode."
+      },
+      image: {
+        provider: "mock",
+        model: env.imageModel,
+        ok: true,
+        cached: true,
+        text: "Mock mode uses cached generated storefront and try-on assets."
+      },
+      note: "Mock mode uses cached Gemini responses generated before the server-side key was removed."
+    };
+  }
+
+  if (!geminiApiKey) {
+    return {
+      geminiKeyConfigured: false,
+      mode: "gemini",
+      configuredText: {
+        model: env.textModel,
+        provider: "gemini",
+        ok: false,
+        error: "Enter a Google AI Studio / Gemini API key in the header."
+      },
+      flashLitePreview: {
+        model: env.textModel,
+        ok: false,
+        error: "Missing user-provided Gemini API key."
+      },
+      textFallback: {
+        model: env.textFallbackModel,
+        ok: false,
+        error: "Missing user-provided Gemini API key."
+      },
+      image: {
+        provider: "gemini",
+        model: env.imageModel,
+        ok: false,
+        error: "Missing user-provided Gemini API key."
+      },
+      note: "ShopRails no longer stores a shared Gemini key. Paste your own key in the header or switch to mock."
+    };
+  }
+
   const textPrompt = "Reply with exactly: ShopRails text OK";
   let configuredText;
   try {
-    configuredText = await createLlmProvider("gemini").generateText({
+    configuredText = await createLlmProvider("gemini", { geminiApiKey }).generateText({
       name: "llm.app_self_test",
       prompt: textPrompt,
       fallback: "ShopRails text OK"
@@ -241,7 +332,8 @@ export async function runAiProviderSelfTest() {
         category: "props",
         reason: "A reusable app self-test image proving the Nano Banana 2 provider can create and serve an image."
       },
-      "gemini"
+      "gemini",
+      { apiKey: geminiApiKey }
     );
     image = {
       ...image,
@@ -256,11 +348,11 @@ export async function runAiProviderSelfTest() {
     };
   }
 
-  const flashLitePreview = await probeGeminiTextModel("gemini-3.1-flash-lite-preview", textPrompt);
-  const textFallback = await probeGeminiTextModel(env.textFallbackModel, textPrompt);
+  const flashLitePreview = await probeGeminiTextModel("gemini-3.1-flash-lite-preview", textPrompt, geminiApiKey);
+  const textFallback = await probeGeminiTextModel(env.textFallbackModel, textPrompt, geminiApiKey);
 
   return {
-    geminiKeyConfigured: Boolean(env.geminiApiKey),
+    geminiKeyConfigured: Boolean(geminiApiKey),
     configuredText,
     flashLitePreview,
     textFallback,
@@ -275,6 +367,7 @@ export async function generateProductImageAsset(offer, mode = "mock", options = 
   const env = shoprailsEnv();
   const provider = mode === "gemini" || mode === "real" || mode === "gemini-force" ? "gemini" : "mock";
   const force = Boolean(options.force) || mode === "gemini-force";
+  const geminiApiKey = options.geminiApiKey || options.apiKey || "";
   await mkdir(GENERATED_DIR, { recursive: true });
 
   if (provider === "mock") {
@@ -297,6 +390,10 @@ export async function generateProductImageAsset(offer, mode = "mock", options = 
       url: `/artifacts/generated-images/${fileName}`,
       prompt: "mock"
     };
+  }
+
+  if (!geminiApiKey) {
+    throw new Error("Enter a Google AI Studio / Gemini API key in the header, or switch image mode to mock.");
   }
 
   const fileName = `${safeFileName(offer.id)}-${safeFileName(env.imageModel)}.png`;
@@ -343,7 +440,7 @@ export async function generateProductImageAsset(offer, mode = "mock", options = 
     }
   };
 
-  const payload = await callGemini(env.imageModel, body, env.geminiApiKey);
+  const payload = await callGemini(env.imageModel, body, geminiApiKey);
   const image = imageFromGeminiResponse(payload);
   if (!image) {
     throw new Error(`Gemini image model ${env.imageModel} returned no inline image data.`);
@@ -366,12 +463,10 @@ function localPathForPersonImage(personImageUrl) {
   return join(process.cwd(), personImageUrl.replace(/^\/+/, ""));
 }
 
-export async function generateCostumeTryOnAsset(offer, { personImageUrl = TRY_ON_PERSON_IMAGE, mode = "gemini" } = {}) {
+export async function generateCostumeTryOnAsset(offer, { personImageUrl = TRY_ON_PERSON_IMAGE, mode = "gemini", geminiApiKey = "", apiKey = "" } = {}) {
   const env = shoprailsEnv();
   const provider = mode === "gemini" || mode === "real" ? "gemini" : mode;
-  if (provider !== "gemini") {
-    throw new Error("Virtual try-on requires Gemini image mode; mock try-on images are disabled for this demo.");
-  }
+  const requestApiKey = geminiApiKey || apiKey;
 
   await mkdir(GENERATED_DIR, { recursive: true });
   const model = env.imageModel || TRY_ON_IMAGE_MODEL;
@@ -389,6 +484,14 @@ export async function generateCostumeTryOnAsset(offer, { personImageUrl = TRY_ON
       promptSummary: "Fashion e-commerce virtual try-on preserving the buyer reference photo and applying the selected pirate costume.",
       cached: true
     };
+  }
+
+  if (provider !== "gemini") {
+    throw new Error("No cached virtual try-on image exists for this costume. Enter a Gemini key and switch mock mode off to generate one.");
+  }
+
+  if (!requestApiKey) {
+    throw new Error("Enter a Google AI Studio / Gemini API key in the header to generate a new virtual try-on image.");
   }
 
   const imageBytes = await readFile(localPathForPersonImage(personImageUrl));
@@ -415,7 +518,7 @@ export async function generateCostumeTryOnAsset(offer, { personImageUrl = TRY_ON
     }
   };
 
-  const payload = await callGemini(model, body, env.geminiApiKey);
+  const payload = await callGemini(model, body, requestApiKey);
   const image = imageFromGeminiResponse(payload);
   if (!image) {
     throw new Error(`Gemini image model ${model} returned no virtual try-on image.`);

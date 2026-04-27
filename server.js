@@ -54,6 +54,10 @@ async function readJson(req) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+function requestGeminiApiKey(req, body = {}) {
+  return String(req.headers["x-shoprails-gemini-key"] || body.geminiApiKey || "").trim();
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requested = url.pathname === "/" ? "/index.html" : url.pathname;
@@ -81,17 +85,22 @@ async function routeApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/demo/run") {
-    const llmMode = body.llmMode || url.searchParams.get("llm") || "gemini";
-    const result = await runDemoMissionWithLlm(state, createLlmProvider(llmMode));
+    const llmMode = body.llmMode || url.searchParams.get("llm") || "mock";
+    const result = await runDemoMissionWithLlm(state, createLlmProvider(llmMode, {
+      geminiApiKey: requestGeminiApiKey(req, body)
+    }));
     return sendJson(res, 200, { result, state });
   }
 
   if (req.method === "POST" && url.pathname === "/api/demo/full") {
     state = createInitialState();
-    const llmMode = body.llmMode || "gemini";
-    const result = await runDemoMissionWithLlm(state, createLlmProvider(llmMode));
+    const llmMode = body.llmMode || "mock";
+    const geminiApiKey = requestGeminiApiKey(req, body);
+    const result = await runDemoMissionWithLlm(state, createLlmProvider(llmMode, {
+      geminiApiKey
+    }));
     const proofs = {
-      ai: await runAiProviderSelfTest(),
+      ai: await runAiProviderSelfTest({ mode: llmMode, geminiApiKey }),
       escrow: await runEscrowDemo(),
       nanopayment: await runNanopaymentProof(`http://${req.headers.host}`),
       circleWallets: await getCircleWalletsStatus(),
@@ -106,7 +115,9 @@ async function routeApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/llm/call") {
-    const llm = createLlmProvider(body.llmMode || "gemini");
+    const llm = createLlmProvider(body.llmMode || "mock", {
+      geminiApiKey: requestGeminiApiKey(req, body)
+    });
     const result = await llm.generateText({
       name: body.name || "llm.demo_call",
       prompt: body.prompt || "Explain ShopRails in one sentence.",
@@ -116,7 +127,10 @@ async function routeApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/ai/self-test") {
-    return sendJson(res, 200, await runAiProviderSelfTest());
+    return sendJson(res, 200, await runAiProviderSelfTest({
+      mode: body.llmMode || body.mode || "mock",
+      geminiApiKey: requestGeminiApiKey(req, body)
+    }));
   }
 
   if (req.method === "POST" && url.pathname === "/api/images/generate") {
@@ -130,7 +144,9 @@ async function routeApi(req, res) {
 
     for (const offer of selected) {
       try {
-        const asset = await generateProductImageAsset(offer, mode);
+        const asset = await generateProductImageAsset(offer, mode, {
+          geminiApiKey: requestGeminiApiKey(req, body)
+        });
         assets.push(asset);
         const stateOffer = state.catalog.find((item) => item.id === offer.id);
         if (stateOffer) stateOffer.image = asset.url;
@@ -166,7 +182,11 @@ async function routeApi(req, res) {
       });
     }
 
-    const image = await generateCostumeTryOnAsset(offer, { personImageUrl, mode: imageMode });
+    const image = await generateCostumeTryOnAsset(offer, {
+      personImageUrl,
+      mode: imageMode,
+      geminiApiKey: requestGeminiApiKey(req, body)
+    });
     const nanoTransactions = await sendArcNanoTransactions(buildTryOnNanoActions(offerId, state.catalog));
     const tryOn = applyCostumeTryOnResult(state, {
       offerId,

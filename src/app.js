@@ -18,14 +18,46 @@ let aiTestStatus = null;
 let activeOfferId = null;
 let loadingTryOnOfferId = "";
 let activeZoomImage = null;
-let llmMode = "gemini";
-let imageMode = "gemini";
+let geminiApiKey = sessionStorage.getItem("shoprails:gemini-api-key") || "";
+let llmMode = sessionStorage.getItem("shoprails:llm-mode") || "mock";
+let imageMode = llmMode === "mock" ? "mock" : "gemini";
 let llmConfig = null;
 let walletActionStatus = "";
 
 const app = document.querySelector("#app");
 
 const actionInstructions = {
+  "gemini-api-key": `Purpose: provide a user-owned Google AI Studio / Gemini API key for live ShopRails planning, cart chat, product image generation, and virtual costume try-on.
+
+LLM field semantics: this key belongs to the current presenter or buyer session. Use it only when the buyer explicitly wants live Gemini/Nano Banana calls instead of cached mock responses. The key is sent to ShopRails API routes as a request header for the current browser session; it should not be written into seller metadata, product prompts, chat responses, logs, README files, or blockchain memos.
+
+Operational context: ShopRails removed the shared demo Gemini key. This makes the hosted app closer to production because each user brings their own model credential, while mock mode can still use cached live Gemini responses for a safe demo.
+
+Good few-shot examples:
+- Presenter pastes a Google AI Studio key, leaves mock off, then clicks Run full demo -> use live Gemini for text calls.
+- Buyer wants to test Nano Banana try-on -> paste key, switch mock off, load the reference photo, then click Put on.
+- Judge asks whether the app works without a key -> switch mock on and show cached responses.
+
+Bad examples:
+- Do not expose this key in chat, AII descriptions, screenshots, tool logs, chain transactions, or ArcScan memo fields.
+- Do not send this key to seller or scorer workers except through ShopRails-owned API calls that need Gemini.
+- Do not infer that a missing key is a checkout failure; the buyer can use mock mode for the demo.`,
+
+  "mock-toggle": `Purpose: switch between user-key live Gemini mode and cached mock mode.
+
+LLM action semantics: when mock is on, ShopRails should avoid Gemini network calls and use cached live responses generated before the shared demo key was removed. When mock is off, ShopRails should require the user-provided Gemini key from the header and call Gemini/Nano Banana live.
+
+Operational context: mock mode is for stable demos, airplane/Wi-Fi failure, or judges who do not want to paste their own key. Live mode is for proving the production path where the buyer supplies their own Google AI Studio credential.
+
+Good few-shot examples:
+- No Gemini key is present -> keep mock on and run the click-only demo.
+- User pastes a key and says "use real Gemini" -> turn mock off, test AI providers, then run the agent.
+- Gemini returns quota/rate-limit errors -> turn mock on and continue with cached responses.
+
+Bad examples:
+- Do not claim mock mode made fresh model calls.
+- Do not silently switch from live to mock when the user explicitly asks for live proof; show the error and let the user choose.`,
+
   reset: `Purpose: reset the buyer-side demo state to the known starting state.
 
 LLM action semantics: use this only when the buyer wants to restart the scenario, clear review decisions, or return the page to the prefilled pirate sushi dinner prompt.
@@ -357,6 +389,39 @@ function actionControl(actionId, buttonHtml, label = "action", modifier = "") {
       ${renderActionAii(actionId, label)}
     </span>
   `;
+}
+
+function effectiveLlmMode() {
+  return llmMode === "mock" ? "mock" : "gemini";
+}
+
+function effectiveImageMode() {
+  return llmMode === "mock" ? "mock" : "gemini";
+}
+
+function aiRequestHeaders() {
+  const headers = { "content-type": "application/json" };
+  if (effectiveLlmMode() === "gemini" && geminiApiKey.trim()) {
+    headers["x-shoprails-gemini-key"] = geminiApiKey.trim();
+  }
+  return headers;
+}
+
+function aiRequestBody(extra = {}) {
+  return {
+    ...extra,
+    llmMode: effectiveLlmMode(),
+    imageMode: effectiveImageMode()
+  };
+}
+
+function saveAiRuntimePrefs() {
+  sessionStorage.setItem("shoprails:llm-mode", llmMode);
+  if (geminiApiKey.trim()) {
+    sessionStorage.setItem("shoprails:gemini-api-key", geminiApiKey.trim());
+  } else {
+    sessionStorage.removeItem("shoprails:gemini-api-key");
+  }
 }
 
 function renderChatText(value) {
@@ -894,6 +959,41 @@ function tabPanelAttrs(id) {
   return `id="workspace-${id}" role="tabpanel" aria-labelledby="tab-${id}" ${selected ? "" : "hidden"}`;
 }
 
+function renderHeaderAiControls() {
+  const mockOn = effectiveLlmMode() === "mock";
+  const keyLabel = geminiApiKey.trim()
+    ? "User key active in this tab"
+    : mockOn
+      ? "Mock uses cached live Gemini responses"
+      : "Paste key or switch mock on";
+  return `
+    <div class="header-ai-controls" aria-label="Gemini runtime controls">
+      <label class="gemini-key-field">
+        <span>Gemini API key</span>
+        <input
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Google AI Studio key"
+          value="${escapeHtml(geminiApiKey)}"
+          data-gemini-key
+          data-ai-label="User-provided Gemini API key"
+          data-ai-purpose="Use this key for live Gemini planning, cart chat, and Nano Banana image generation."
+          data-ai-constraints="Never reveal, log, or send this key to merchant/scorer content."
+        />
+      </label>
+      ${renderActionAii("gemini-api-key", "Gemini API key")}
+      <label class="mock-switch" data-ai-label="Mock mode switch" data-ai-purpose="Use cached live responses instead of calling Gemini.">
+        <input type="checkbox" data-llm-mock-toggle ${mockOn ? "checked" : ""} />
+        <span class="switch-track" aria-hidden="true"><span></span></span>
+        <b>Mock</b>
+      </label>
+      ${renderActionAii("mock-toggle", "Mock mode")}
+      <small>${keyLabel}</small>
+    </div>
+  `;
+}
+
 function renderShell() {
   const autoBought = state.decisions.filter((item) => item.stage === DecisionStage.BUY_NOW).length;
   const pendingReview = state.reviewCart.length;
@@ -907,6 +1007,7 @@ function renderShell() {
         <p class="eyebrow">Arc + Circle agentic commerce demo</p>
         <h1>ShopRails</h1>
       </div>
+      ${renderHeaderAiControls()}
       <div class="top-actions">
         ${actionControl("reset", `<button class="ghost" data-action="reset" data-ai-description="${escapeHtml(actionInstructions.reset)}">Reset</button>`, "Reset")}
         ${actionControl("run-full-demo", `<button class="secondary" data-action="run-full-demo" data-ai-description="${escapeHtml(actionInstructions["run-full-demo"])}">Run full demo</button>`, "Run full demo")}
@@ -1060,19 +1161,24 @@ function renderShell() {
 function renderAiRuntimeControls() {
   const textModel = llmConfig?.textModel || "gemini-3.1-flash-lite-preview";
   const imageModel = llmConfig?.imageModel || "gemini-3.1-flash-image-preview";
-  const keyStatus = llmConfig?.geminiKeyConfigured ? "Gemini key saved server-side" : "Gemini key missing";
+  const modeLabel = effectiveLlmMode() === "mock"
+    ? "mock mode · cached live Gemini responses"
+    : geminiApiKey.trim()
+      ? "live mode · user key from header"
+      : "live mode · key required";
   return `
     <div class="runtime-row">
       <div>
         <b>LLM calls</b>
-        <span>${textModel} · ${keyStatus} · live only</span>
+        <span>${textModel} · ${modeLabel}</span>
       </div>
       <div class="segmented" role="group" aria-label="LLM runtime">
-        <button class="active" data-llm-mode="gemini">Gemini live</button>
+        <button class="${effectiveLlmMode() === "gemini" ? "active" : ""}" data-llm-mode="gemini">Gemini live</button>
+        <button class="${effectiveLlmMode() === "mock" ? "active" : ""}" data-llm-mode="mock">Mock</button>
       </div>
       <div>
         <b>Images</b>
-        <span>${imageMode === "gemini" ? imageModel : "mock image provider"}</span>
+        <span>${effectiveImageMode() === "gemini" ? imageModel : "cached/mock image provider"}</span>
       </div>
       ${actionControl("test-ai-providers", `<button class="ghost-light" data-action="test-ai-providers" data-ai-description="${escapeHtml(actionInstructions["test-ai-providers"])}">Test AI providers</button>`, "Test AI providers")}
     </div>
@@ -1134,8 +1240,8 @@ function renderProofPanel() {
   const ai = proofs.ai || aiTestStatus;
   const escrowFlow = escrow?.flows?.find((flow) => flow.kind === "review_release");
   const refundFlow = escrow?.flows?.find((flow) => flow.kind === "refund_smoke");
-  const realGemini = ai?.configuredText?.ok;
-  const realImage = ai?.image?.ok;
+  const realGemini = ai?.configuredText?.ok && ai?.configuredText?.provider === "gemini";
+  const realImage = ai?.image?.ok && ai?.image?.provider === "gemini";
   const realNano = nano?.payment?.transaction;
   const realEscrow = escrow?.contractAddress && escrowFlow?.releaseTxHash;
   const realFrequency = Number(frequency?.confirmedCount || 0) >= 50;
@@ -1159,8 +1265,8 @@ function renderProofPanel() {
         ${proofBadge(realEscrow ? "real" : "warn", "Real Arc tx proof", realEscrow ? `contract ${shortAddress(escrow.contractAddress)} create/release/refund` : "not loaded yet", realEscrow ? arcAddressUrl(escrow.contractAddress) : "")}
         ${proofBadge(realNano ? "real" : "warn", "Real x402 nanopayment", realNano ? `${nano.payment.formattedAmount} USDC transfer ${nano.payment.transaction}` : "run full demo to load proof", nano?.payment?.transferProofUrl || "")}
         ${proofBadge(realFrequency ? "real" : "warn", "50+ Arc tx burst", realFrequency ? `${frequency.confirmedCount} txs at ${frequency.amountUsdc} USDC/action` : "run npm run arc:frequency", frequency?.sampleTxUrls?.[0] || "")}
-        ${proofBadge(realGemini ? "real" : "warn", "Real Gemini call", realGemini ? ai.configuredText.model : "click Test AI providers", "")}
-        ${proofBadge(realImage ? "real" : "warn", "Real Nano Banana image", realImage ? ai.image.model : "click Test AI providers", ai?.image?.url || "")}
+        ${proofBadge(realGemini ? "real" : "warn", realGemini ? "Live Gemini call" : "Cached Gemini mode", realGemini ? ai.configuredText.model : "click Test AI providers", "")}
+        ${proofBadge(realImage ? "real" : "warn", realImage ? "Live Nano Banana image" : "Cached Nano Banana image", realImage ? ai.image.model : "click Test AI providers", ai?.image?.url || "")}
         ${proofBadge("sim", "Simulated receipt ledger", "x402-style receipts for every atomic query", "")}
         ${proofBadge(circle.configured ? "real" : "sim", "Circle Wallets API", circleDetail, circle.payment?.txUrl || (circleAddress ? arcAddressUrl(circleAddress) : ""))}
       </div>
@@ -1640,13 +1746,12 @@ async function answerCartFromUi(message) {
   try {
     const response = await fetch("/api/llm/call", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        llmMode: "gemini",
+      headers: aiRequestHeaders(),
+      body: JSON.stringify(aiRequestBody({
         name: /why|explain|reason/i.test(message) ? "client.explain_cart" : "client.chat",
         prompt: cartChatPrompt(message),
         fallback: reference
-      })
+      }))
     });
     const payload = await response.json();
     if (!response.ok || payload.error) {
@@ -1670,7 +1775,7 @@ async function answerCartFromUi(message) {
       output: { reply: text, mode: payload.provider || "gemini" }
     });
   } catch (error) {
-    addChatLine("Shopping Cart", `Real Gemini chat is unavailable right now, so I did not generate a mock LLM response. ${error.message}`);
+    addChatLine("Shopping Cart", `Gemini chat is unavailable in the selected runtime. ${error.message}`);
   }
 }
 
@@ -2123,15 +2228,17 @@ async function runMissionFromUi({ sourceMessage = "", keepTab = "mission" } = {}
   if (buyerMessage) addChatLine("Buyer", buyerMessage);
   chatDraft = "explain the cart";
   walletActionStatus = "";
-  liveStatus = "Running real Gemini LLM calls and loading verified Arc transactions at price / 100,000.";
+  liveStatus = effectiveLlmMode() === "mock"
+    ? "Running cached Gemini responses and loading verified Arc transactions at price / 100,000."
+    : "Running live Gemini LLM calls with the user-provided key and loading verified Arc transactions at price / 100,000.";
   renderShell();
 
   try {
     await fetch("/api/demo/reset", { method: "POST" });
     const response = await fetch("/api/demo/run", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ llmMode })
+      headers: aiRequestHeaders(),
+      body: JSON.stringify(aiRequestBody())
     });
     const payload = await response.json();
     if (!response.ok || payload.error) {
@@ -2145,14 +2252,16 @@ async function runMissionFromUi({ sourceMessage = "", keepTab = "mission" } = {}
       `Agent plan complete. ${state.orders.length} item(s) are Buy It Now, ${state.reviewCart.length} item(s) are waiting for buyer review, and ${state.declined.length} item(s) were declined before signing.`
     );
     chatDraft = "explain the cart";
-    liveStatus = "Real Gemini LLM calls logged. Verified Arc transaction links are loaded at price / 100,000.";
+    liveStatus = effectiveLlmMode() === "mock"
+      ? "Cached Gemini LLM responses logged. Verified Arc transaction links are loaded at price / 100,000."
+      : "Live Gemini LLM calls logged. Verified Arc transaction links are loaded at price / 100,000.";
   } catch (error) {
     state = createInitialState();
     state.proofs = { ...state.proofs, ...cachedProofs };
     if (buyerMessage) addChatLine("Buyer", buyerMessage);
-    addChatLine("Shopping Cart", `Real Gemini planning failed, so ShopRails did not generate a mock plan. Check the server key/provider and retry. ${error.message}`);
+    addChatLine("Shopping Cart", `The selected LLM runtime failed. ${error.message}`);
     chatDraft = state.mission.prompt;
-    liveStatus = `Real Gemini planning failed: ${error.message}`;
+    liveStatus = `LLM planning failed: ${error.message}`;
   }
   activeWorkspaceTab = keepTab;
   renderShell();
@@ -2198,6 +2307,29 @@ async function submitCartCommand(message) {
 }
 
 function bindEvents() {
+  app.querySelector("[data-gemini-key]")?.addEventListener("change", (event) => {
+    geminiApiKey = event.currentTarget.value.trim();
+    saveAiRuntimePrefs();
+    liveStatus = geminiApiKey
+      ? "Gemini key saved for this browser session. Switch mock off to use live Gemini calls."
+      : "Gemini key cleared. Mock mode can still use cached Gemini responses.";
+    renderShell();
+  });
+
+  app.querySelector("[data-gemini-key]")?.addEventListener("input", (event) => {
+    geminiApiKey = event.currentTarget.value;
+  });
+
+  app.querySelector("[data-llm-mock-toggle]")?.addEventListener("change", (event) => {
+    llmMode = event.currentTarget.checked ? "mock" : "gemini";
+    imageMode = effectiveImageMode();
+    saveAiRuntimePrefs();
+    liveStatus = effectiveLlmMode() === "mock"
+      ? "Mock mode selected. ShopRails will use cached Gemini responses."
+      : "Live Gemini selected. Paste a Google AI Studio key in the header before running live calls.";
+    renderShell();
+  });
+
   app.querySelectorAll("[data-workspace-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeWorkspaceTab = button.dataset.workspaceTab;
@@ -2207,7 +2339,6 @@ function bindEvents() {
 
   app.querySelectorAll("[data-action='run-full-demo']").forEach((button) => {
     button.addEventListener("click", async () => {
-      llmMode = "gemini";
       activeWorkspaceTab = "mission";
       state = createInitialState();
       chatDraft = "show me the Arc transactions";
@@ -2215,7 +2346,9 @@ function bindEvents() {
       imageStatus = "";
       tryOnStatus = "";
       walletActionStatus = "";
-      liveStatus = "Running perfect demo: Gemini 3.1 Flash-Lite, cached Circle x402 proof, Circle Wallets proof, cached Arc transaction proof, and reviewed cart approval.";
+      liveStatus = effectiveLlmMode() === "mock"
+        ? "Running perfect demo with cached Gemini responses, cached Circle x402 proof, Circle Wallets proof, Arc transaction proof, and reviewed cart approval."
+        : "Running perfect demo with live Gemini 3.1 Flash-Lite using the user key, cached Circle x402 proof, Circle Wallets proof, Arc transaction proof, and reviewed cart approval.";
       activeOfferId = null;
       loadingTryOnOfferId = "";
       activeZoomImage = null;
@@ -2223,8 +2356,8 @@ function bindEvents() {
       try {
         const response = await fetch("/api/demo/full", {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ llmMode: "gemini" })
+          headers: aiRequestHeaders(),
+          body: JSON.stringify(aiRequestBody())
         });
         const payload = await response.json();
         if (!response.ok || payload.error) {
@@ -2234,7 +2367,9 @@ function bindEvents() {
         state.proofs = payload.proofs;
         reviewChat(state, { message: "confirm all reviewed items" });
         chatDraft = "show me the Arc transactions";
-        liveStatus = "Perfect demo loaded: real Gemini, real Nano Banana, real Circle x402 transfer, real Circle Wallets transfer, real Arc transaction links, reviewed cart approved.";
+        liveStatus = effectiveLlmMode() === "mock"
+          ? "Perfect demo loaded: cached Gemini responses, real Nano Banana proof artifacts, real Circle x402 transfer, real Circle Wallets transfer, real Arc transaction links, reviewed cart approved."
+          : "Perfect demo loaded: live Gemini with user key, real Nano Banana proof artifacts, real Circle x402 transfer, real Circle Wallets transfer, real Arc transaction links, reviewed cart approved.";
       } catch (error) {
         liveStatus = `Full demo failed: ${error.message}`;
       }
@@ -2367,8 +2502,8 @@ function bindEvents() {
       try {
         const response = await fetch("/api/costumes/try-on", {
           method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ offerId, personImageUrl, imageMode })
+          headers: aiRequestHeaders(),
+          body: JSON.stringify(aiRequestBody({ offerId, personImageUrl }))
         });
         const payload = await response.json();
         if (!response.ok || payload.error) {
@@ -2388,17 +2523,27 @@ function bindEvents() {
 
   app.querySelectorAll("[data-llm-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      llmMode = "gemini";
-      liveStatus = "Gemini live mode selected. Demo chat and planning do not use mock LLM responses.";
+      llmMode = button.dataset.llmMode === "mock" ? "mock" : "gemini";
+      imageMode = effectiveImageMode();
+      saveAiRuntimePrefs();
+      liveStatus = effectiveLlmMode() === "mock"
+        ? "Mock mode selected. ShopRails will use cached live Gemini responses and cached image assets."
+        : "Gemini live mode selected. Enter a Google AI Studio key in the header before running live LLM or image calls.";
       renderShell();
     });
   });
 
   app.querySelector("[data-action='test-ai-providers']")?.addEventListener("click", async () => {
-    aiTestStatus = "Testing Gemini 3.1 Flash-Lite, text fallback, and Nano Banana 2 image generation...";
+    aiTestStatus = effectiveLlmMode() === "mock"
+      ? "Checking cached Gemini response mode..."
+      : "Testing Gemini 3.1 Flash-Lite, text fallback, and Nano Banana 2 image generation with the header key...";
     renderShell();
     try {
-      const response = await fetch("/api/ai/self-test", { method: "POST" });
+      const response = await fetch("/api/ai/self-test", {
+        method: "POST",
+        headers: aiRequestHeaders(),
+        body: JSON.stringify(aiRequestBody())
+      });
       const payload = await response.json();
       if (!response.ok || payload.error) {
         throw new Error(payload.error || "AI provider self-test failed");
@@ -2411,13 +2556,13 @@ function bindEvents() {
   });
 
   app.querySelector("[data-action='generate-images']")?.addEventListener("click", async () => {
-    imageStatus = `Generating storefront images with ${imageMode === "gemini" ? "Google Nano Banana / Gemini image" : "mock image"} provider...`;
+    imageStatus = `Generating storefront images with ${effectiveImageMode() === "gemini" ? "Google Nano Banana / Gemini image" : "cached/mock image"} provider...`;
     renderShell();
     try {
       const response = await fetch("/api/images/generate", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: imageMode })
+        headers: aiRequestHeaders(),
+        body: JSON.stringify(aiRequestBody({ mode: effectiveImageMode() }))
       });
       const payload = await response.json();
       if (!response.ok && response.status !== 207) {
